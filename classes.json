@@ -1,0 +1,82 @@
+{
+  "Anti-emetics": {
+    "medication_class_type": "Anti-emetics",
+    "text_color": "Black",
+    "background_color": "Salmon 156"
+  },
+  "Anticholinergic drugs": {
+    "medication_class_type": "Anticholinergic drugs",
+    "text_color": "Black",
+    "background_color": "Green 367"
+  },
+  "Benzodiazepines": {
+    "medication_class_type": "Benzodiazepines",
+    "text_color": "White (drug name), Black (units)",
+    "background_color": "Orange 151"
+  },
+  "Benzodiazepine antagonists": {
+    "medication_class_type": "Benzodiazepine antagonists",
+    "text_color": "Black",
+    "background_color": "White with Orange 151 diagonal stripes"
+  },
+  "Induction drugs": {
+    "medication_class_type": "Induction drugs",
+    "text_color": "Black",
+    "background_color": "Process yellow C"
+  },
+  "Local anaesthetics": {
+    "medication_class_type": "Local anaesthetics",
+    "text_color": "Black",
+    "background_color": "Grey 401"
+  },
+  "Heparin": {
+    "medication_class_type": "Miscellaneous drugs",
+    "text_color": "Black",
+    "background_color": "White with solid Black border"
+  },
+  "Protamine": {
+    "medication_class_type": "Miscellaneous drugs",
+    "text_color": "Black",
+    "background_color": "White with Black diagonal stripes"
+  },
+  "Suxamethonium": {
+    "medication_class_type": "Muscle relaxants",
+    "text_color": "White (top), Black (bottom)",
+    "background_color": "Black top half, Warm red bottom half"
+  },
+  "Muscle relaxants": {
+    "medication_class_type": "Muscle relaxants",
+    "text_color": "Black",
+    "background_color": "Warm red"
+  },
+  "Muscle relaxant reversal drugs": {
+    "medication_class_type": "Muscle relaxant reversal drugs",
+    "text_color": "Black",
+    "background_color": "White with Warm red diagonal stripes"
+  },
+  "Opioids": {
+    "medication_class_type": "Opioids",
+    "text_color": "Black",
+    "background_color": "Blue 297"
+  },
+  "Opioid antagonists": {
+    "medication_class_type": "Opioid antagonists",
+    "text_color": "Black",
+    "background_color": "White with Blue 297 diagonal stripes"
+  },
+  "adrenalin": {
+    "medication_class_type": "Vasopressors",
+    "text_color": "White (top), Black (bottom)",
+    "background_color": "Black top half, Violet 256 bottom half"
+  },
+  "Vasopressors": {
+    "medication_class_type": "Vasopressors",
+    "text_color": "Black",
+    "background_color": "Violet 256"
+  },
+  "Hypotensive drugs": {
+    "medication_class_type": "Hypotensive drugs",
+    "text_color": "Black",
+    "background_color": "White with Violet 256 diagonal stripes"
+  }
+}
