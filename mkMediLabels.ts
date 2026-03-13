@@ -4,8 +4,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 // --- Configuration ---
 const FILES = {
     CLASSES_JSON: 'classes.json',     
-    TALLMAN_GER_CSV: 'tallmanGer.csv', // German list (Highest priority)
-    TALLMAN_ENGL_CSV: 'tallmanEngl.csv', // English list (Fallback)
+    TALLMAN_GER_CSV: 'tallmanGer.csv', 
+    TALLMAN_ENGL_CSV: 'tallmanEngl.csv', 
     INPUT_MEDS: 'input_meds.txt',     
     OUTPUT_DIR: './labels'            
 };
@@ -29,9 +29,13 @@ interface MedClass {
     background_color: string;
 }
 
+interface InputMed {
+    name: string;
+    userClass?: string;
+}
+
 // --- Helper Functions ---
 
-// Robust parser to handle multi-line quotes and commas in the comments column
 function parseTallmanCSV(filePath: string): Map<string, string> {
     const map = new Map<string, string>();
     if (!fs.existsSync(filePath)) {
@@ -52,7 +56,7 @@ function parseTallmanCSV(filePath: string): Map<string, string> {
         if (char === '"') {
             if (isQuoted && nextChar === '"') {
                 currentField += '"';
-                i++; // Skip escaped quote
+                i++; 
             } else {
                 isQuoted = !isQuoted;
             }
@@ -65,9 +69,7 @@ function parseTallmanCSV(filePath: string): Map<string, string> {
         } else if (char === '\n' && !isQuoted) {
             if (isFirstField) currentMed = currentField.trim();
             
-            // Skip header and empty lines
             if (currentMed && currentMed.toLowerCase() !== 'medicine') {
-                // Remove trailing asterisks (e.g., benzylpenicillin*)
                 const cleanMed = currentMed.replace(/\*$/, '');
                 map.set(cleanMed.toLowerCase(), cleanMed);
             }
@@ -79,7 +81,6 @@ function parseTallmanCSV(filePath: string): Map<string, string> {
         }
     }
     
-    // Catch the final line if no trailing newline exists
     if (isFirstField && currentField) currentMed = currentField.trim();
     if (currentMed && currentMed.toLowerCase() !== 'medicine') {
         const cleanMed = currentMed.replace(/\*$/, '');
@@ -89,10 +90,23 @@ function parseTallmanCSV(filePath: string): Map<string, string> {
     return map;
 }
 
-function parseInputMeds(filePath: string): string[] {
+function parseInputMeds(filePath: string): InputMed[] {
     if (!fs.existsSync(filePath)) return[];
     const content = fs.readFileSync(filePath, 'utf-8');
-    return content.split(',').map(m => m.trim()).filter(m => m.length > 0);
+    
+    const items = content.split(',').map(m => m.trim()).filter(m => m.length > 0);
+    
+    return items.map(item => {
+        // Regex to match "Med Name (Class Name)"
+        const match = item.match(/^(.*?)(?:\s*\((.*?)\))?$/);
+        if (match) {
+            return {
+                name: match[1].trim(),
+                userClass: match[2] ? match[2].trim() : undefined
+            };
+        }
+        return { name: item };
+    });
 }
 
 function extractPrimaryColor(bgDescription: string): string {
@@ -104,7 +118,6 @@ function extractPrimaryColor(bgDescription: string): string {
     return bgDescription.includes('Black') ? '#000000' : '#FFFFFF';
 }
 
-// Formats medicine name: ALL CAPS becomes bold, everything else is normal
 function formatTallmanSVG(medName: string): string {
     const parts = medName.split(/([A-Z]+)/);
     return parts.map(part => {
@@ -134,23 +147,20 @@ function generateSVG(medName: string, medClass: MedClass): string {
                 </pattern>
             </defs>
             <rect width="100%" height="100%" fill="url(#stripes)" rx="10" />
-            <rect x="30" y="10" width="240" height="100" fill="#FFFFFF" rx="5" />
+            <rect x="15" y="15" width="270" height="90" fill="#FFFFFF" rx="5" />
         `;
         textFill = '#000000';
     } 
     else if (bgDesc.includes('top half') && bgDesc.includes('bottom half')) {
         const bottomColor = extractPrimaryColor(bgDesc);
         backgroundSvg = `
-            <rect width="100%" height="50%" fill="#000000" rx="10" />
-            <rect y="40" width="100%" height="20" fill="#000000" /> 
-            <rect y="50" width="100%" height="50%" fill="${bottomColor}" />
-            <rect y="50" width="100%" height="70" fill="${bottomColor}" rx="10" />
-            <rect y="50" width="100%" height="20" fill="${bottomColor}" /> 
+            <rect width="100%" height="100%" fill="${bottomColor}" rx="10" />
+            <path d="M 0 10 C 0 4.477 4.477 0 10 0 L 290 0 C 295.523 0 300 4.477 300 10 L 300 55 L 0 55 Z" fill="#000000" />
         `;
     }
     else if (bgDesc.includes('solid Black border')) {
         backgroundSvg = `
-            <rect width="100%" height="100%" fill="#FFFFFF" stroke="#000000" stroke-width="10" rx="10" />
+            <rect x="4" y="4" width="292" height="112" fill="#FFFFFF" stroke="#000000" stroke-width="8" rx="10" />
         `;
     }
     else {
@@ -165,15 +175,15 @@ function generateSVG(medName: string, medClass: MedClass): string {
     
     if (bgDesc.includes('top half')) {
         textSvg = `
-            <text x="50%" y="40%" dominant-baseline="middle" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-size="28" fill="#FFFFFF">${formattedMedName}</text>
-            <line x1="40" y1="95" x2="180" y2="95" stroke="#000000" stroke-width="3" stroke-dasharray="4,10" stroke-linecap="round" />
-            <text x="270" y="100" text-anchor="end" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="16" fill="#000000">? mg/ml</text>
+            <text x="50%" y="30" dominant-baseline="middle" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-size="32" fill="#FFFFFF">${formattedMedName}</text>
+            <line x1="15" y1="95" x2="195" y2="95" stroke="#000000" stroke-width="2.5" stroke-dasharray="4,8" stroke-linecap="round" />
+            <text x="285" y="101" text-anchor="end" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="18" fill="#000000">? mg/ml</text>
         `;
     } else {
         textSvg = `
-            <text x="50%" y="45%" dominant-baseline="middle" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-size="28" fill="${textFill}">${formattedMedName}</text>
-            <line x1="40" y1="95" x2="180" y2="95" stroke="${textFill}" stroke-width="3" stroke-dasharray="4,10" stroke-linecap="round" />
-            <text x="270" y="100" text-anchor="end" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="16" fill="${textFill}">? mg/ml</text>
+            <text x="50%" y="45" dominant-baseline="middle" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-size="32" fill="${textFill}">${formattedMedName}</text>
+            <line x1="15" y1="95" x2="195" y2="95" stroke="${textFill}" stroke-width="2.5" stroke-dasharray="4,8" stroke-linecap="round" />
+            <text x="285" y="101" text-anchor="end" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="18" fill="${textFill}">? mg/ml</text>
         `;
     }
 
@@ -202,13 +212,11 @@ async function main() {
     // --- Load Tallman Maps with Precedence ---
     const tallmanMap = new Map<string, string>();
     
-    // 1. Load English (Base layer)
     const englishMap = parseTallmanCSV(FILES.TALLMAN_ENGL_CSV);
-    for (const [key, val] of englishMap.entries()) {
+    for (const[key, val] of englishMap.entries()) {
         tallmanMap.set(key, val);
     }
 
-    // 2. Load German (Overwrites English on collisions)
     const germanMap = parseTallmanCSV(FILES.TALLMAN_GER_CSV);
     for (const [key, val] of germanMap.entries()) {
         tallmanMap.set(key, val);
@@ -227,23 +235,50 @@ async function main() {
         fs.mkdirSync(FILES.OUTPUT_DIR);
     }
 
-    for (const med of inputMeds) {
-        const searchKey = med.toLowerCase();
-        const tallmanName = tallmanMap.get(searchKey) || med;
+    for (const inputObj of inputMeds) {
+        const rawName = inputObj.name;
+        const searchKey = rawName.toLowerCase();
+        const tallmanName = tallmanMap.get(searchKey) || rawName;
         
-        console.log(`Processing: ${tallmanName} (Original input: ${med})`);
+        console.log(`Processing: ${tallmanName} (Original input: ${rawName})`);
+        if (inputObj.userClass) {
+            console.log(` > User suggested class: ${inputObj.userClass}`);
+        }
 
         let assignedClass = "";
-        if (searchKey === "adrenaline" || searchKey === "epinephrine") {
+        
+        // Special case bypass (unless overridden by a user-provided class)
+        if (!inputObj.userClass && (searchKey === "adrenaline" || searchKey === "epinephrine")) {
             assignedClass = "adrenalin";
         } else {
-            const prompt = `
-            You are a pharmaceutical categorization assistant.
-            I have a medication named "${tallmanName}".
-            Categorize it into exactly ONE of the following JSON keys: ${JSON.stringify(validKeys)}.
-            Return ONLY the string of the key, no markdown, no quotes, no extra text.
-            If you are completely unsure, return "Miscellaneous drugs" if it exists, otherwise return the closest match.
-            `;
+            let prompt = "";
+            
+            // BLIND CONDITIONAL PROMPT
+            if (inputObj.userClass) {
+                prompt = `
+                You are a strict data formatting assistant.
+                Provided Semantic Category: "${inputObj.userClass}"
+
+                Valid Target Keys: ${JSON.stringify(validKeys)}
+
+                Instructions:
+                1. You MUST map the Provided Semantic Category to the closest semantic match from the Valid Target Keys.
+                2. Explicit rules: "analgetikum", "analgesic", "painkiller", or similar MUST map to "Opioids" (as this is the designated label color group for painkillers).
+                3. Return ONLY the exact string from the Valid Target Keys. Do not explain yourself. Do not use quotes.
+                `;
+            } else {
+                prompt = `
+                You are a strict pharmaceutical categorization assistant.
+                Medication Name: "${tallmanName}"
+
+                Valid Target Keys: ${JSON.stringify(validKeys)}
+
+                Instructions:
+                1. Categorize the medication into the most appropriate category from the Valid Target Keys based on standard anesthesia/critical care syringe label colors.
+                2. Return ONLY the exact string from the Valid Target Keys. Do not explain yourself. Do not use quotes.
+                3. If the drug does not naturally fit any of these very specific anesthesia categories (e.g., standard antibiotics, basic fluids), output "Heparin" as the generic miscellaneous fallback.
+                `;
+            }
 
             try {
                 const result = await model.generateContent(prompt);
