@@ -13,10 +13,10 @@ It leverages the Gemini Pro API to automatically categorize medications into the
 
 ## Features
 - **ISO Color Standards**: Automatically applies the correct background, text, and stripe colors based on standard anesthesia/critical care classifications.
-- **LLM-Powered Categorization**: Uses the Gemini API to intelligently classify a drug based on standard medical guidelines.
-- **Intelligent Auto-Dosage**: Predicts both the standard unit (e.g., `mg`/`mcg`) and the standard absolute IV bolus dose or concentration structure based on european (specifically German/Austrian) emergency medicine standards.
+- **LLM-Powered Categorization**: Uses the ultra-fast `@google/genai` API with parallel processing to intelligently classify a drug based on standard medical guidelines.
+- **Intelligent Auto-Dosage & Routes**: Predicts both the standard unit (e.g., `mg`/`mcg`) and the standard absolute IV bolus dose, concentration structure, and administration route (e.g., `i.v.`, `inh.`) based on european emergency medicine standards.
 - **Tall Man Lettering**: Uses internal libraries (German prioritized over English fallback) to safely format look-alike, sound-alike drug names (e.g., *AmiodarONE*).
-- **Proportional SVG Layout**: Output clean, elastic, scalable `.svg` configurations directly.
+- **Proportional SVG Layout**: Outputs clean, elastic, scalable `.svg` configurations directly. Uses explicit geometric math for cross-platform rendering (consistent in Safari, Chrome, and Figma).
 - **API and CLI Integration**: Fast execution via Bun, or callable as a TypeScript library in other projects.
 
 ## Prerequisites
@@ -66,13 +66,15 @@ bun run mkMediLabels.ts -f input_meds.txt
 | `-o, --output <dir>` | Directory to save generated SVGs | `./labels` |
 | `-a, --auto-dosage` | Fetch numerical dosages (e.g., `5 mg`) via API | `false` |
 | `-C, --concentration` | Fetch concentration (e.g., `10 mg/ml`). (If `false`, uses absolute dose instead) | `false` |
+| `-r, --route` | Include administration route (e.g. `i.v.`, `inh.`) next to the dosage/concentration | `false` |
 | `-s, --scale <number>` | Scale multiplier for text padding. `1.0` is default size | `1.0` |
+| `-S, --size-scale <number>` | Scale multiplier for the entire SVG size linearly | `1.0` |
 | `-k, --api-key <string>` | Pass the Gemini API key as plaintext | |
 | `-K, --api-key-file <path>`| Path to file containing the Gemini API key | |
 
 Example with full layout options:
 ```bash
-bun run mkMediLabels.ts -a -C -s 1.2 "Thiopental"
+bun run mkMediLabels.ts -a -r -C -S 0.9 -s 1.2 "Thiopental"
 ```
 
 ---
@@ -94,6 +96,8 @@ await generateMediLabels({
     outputDir: "./custom_labels",
     autoDosage: true,    // Generate text sizes like "5 mg"
     concentration: true, // Use concentration format "10 mg/ml" 
-    scale: 1.0           // Normal text size padding
+    route: true,         // Append the route of administration, e.g. "i.v."
+    scale: 1.0,          // Padding scale
+    sizeScale: 0.9       // Scaled down linear SVG size
 });
 ```
