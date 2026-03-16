@@ -18,7 +18,7 @@
   "Benzodiazepines": {
     "backgroundColor": "Orange 151",
     "textColor": "White",
-    "unitTextColor": "Black",
+    "unitTextColor": "White",
     "isStriped": false,
     "isSplit": false,
     "hasBorder": false
