@@ -13,6 +13,18 @@ It leverages the Gemini Pro API to automatically categorize medications into the
 
 *Note: This tool is heavily tailored toward **German** standards (DIVI) first and **English** second.* This can be changes via the `--language-priority` option, see below for more.
 
+## Quick Start (via NPM / Bunx)
+If you have Bun installed, you don't even need to clone the repository. You can run the tool directly from the NPM registry using `bunx` (Bun's equivalent to `npx`):
+
+```bash
+export GEMINI_API_KEY="your-api-key-here"
+bunx tall-man-medis -a "Adrenalin"
+```
+
+*(Note: Because this is a native TypeScript package, it requires `bunx` instead of `npx` to run successfully!)*
+
+> I think deno would work as well, but havent tested it yet.
+
 ## Further Reading & Standards
 - The official ISO for the colors: [ISO 26825:2020 - User-applied labels for syringes containing drugs used during anaesthesia](https://www.iso.org/standard/74033.html). I took the colors from [anaesthetists.org](https://anaesthetists.org/Portals/0/PDFs/Guidelines%20PDFs/Syringe%20labelling%202022%20v1.1.pdf?ver=2022-10-26-140938-370) (with a singular adjustment for benzodiazepines to make the dosage text color also white, as the spec doesnt make sense there IMO)
 - [ISMP Tall Man Lettering Guide](https://online.ecri.org/hubfs/ISMP/Resources/ISMP_Look-Alike_Tallman_Letters.pdf)
@@ -33,14 +45,14 @@ You can review a large output of generated examples in the `example/withDoage` f
 ### 1. Complex Tall Man Translation (DiazePAM)
 Correctly breaks out multiple uppercase spans and predicts a standard bolus dose + application route.
 ```bash
-bun run mkMediLabels.ts -a -r "diazepam"
+bunx tall-man-medis -a -r "diazepam"
 ```
 <img src="example/withDoage/DiazePAM.svg" width="220" />
 
 ### 2. Inhalation Route Prediction (Methoxyfluran)
 Notice how the API correctly deduces that Methoxyfluran is an inhaled volatile agent, returning `3ml inh.` rather than a systemic mg dose!
 ```bash
-bun run mkMediLabels.ts -a -r "Methoxyfluran"
+bunx tall-man-medis -a -r "Methoxyfluran"
 ```
 <img src="example/withDoage/Methoxyfluran.svg" width="220" />
 
@@ -49,7 +61,7 @@ bun run mkMediLabels.ts -a -r "Methoxyfluran"
 - Automatic recognition: the generator detects common antidotes/antagonists (e.g., Naloxon, Flumazenil, Sugammadex) and tags them as "Antidote / Antagonist" to improve classification and labeling semantics.
 
 ```bash
-bun run mkMediLabels.ts -a -r "Naloxon"
+bunx tall-man-medis -a -r "Naloxon"
 ```
 <img src="example/withDoage/Naloxon.svg" width="220" />
 
@@ -57,7 +69,7 @@ bun run mkMediLabels.ts -a -r "Naloxon"
 By default (without the `-a` flag), the tool generates generic labels with a standardized dotted line for manual dosage inputs.
 
 ```bash
-bun run mkMediLabels.ts "Adrenalin"
+bunx tall-man-medis "Adrenalin"
 ```
 
 <img src="example/withoutDosage/Adrenalin.svg" width="220" />
@@ -66,7 +78,7 @@ bun run mkMediLabels.ts "Adrenalin"
 - [Bun](https://bun.sh/) (JavaScript runtime)
 - A [Gemini API Key](https://aistudio.google.com/app/apikey).
 
-## Setup
+## Local Setup (For Development)
 1. Clone the repository.
 2. Install dependencies:
    ```bash
@@ -86,17 +98,17 @@ You can provide medications via a text file, a comma-separated string, or direct
 
 **1. Direct arguments (Positional):**
 ```bash
-bun run mkMediLabels.ts Adrenalin Fentanyl "Propofol (Hypnotics)"
+bunx tall-man-medis Adrenalin Fentanyl "Propofol (Hypnotics)"
 ```
 
 **2. Using a string flag:**
 ```bash
-bun run mkMediLabels.ts -m "Amiodaron, Ketamin, Midazolam"
+bunx tall-man-medis -m "Amiodaron, Ketamin, Midazolam"
 ```
 
 **3. Using an input file:**
 ```bash
-bun run mkMediLabels.ts -f input_meds.txt
+bunx tall-man-medis -f input_meds.txt
 ```
 
 ### Options
@@ -117,7 +129,7 @@ bun run mkMediLabels.ts -f input_meds.txt
 
 Example with full layout options:
 ```bash
-bun run mkMediLabels.ts -a -r -C -S 0.9 -s 1.2 "Thiopental"
+bunx tall-man-medis -a -r -C -S 0.9 -s 1.2 "Thiopental"
 ```
 
 ---
