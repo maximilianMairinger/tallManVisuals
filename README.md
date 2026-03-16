@@ -1,5 +1,12 @@
 # Tall Man Medis - Syringe Label Generator
 
+<p align="center">
+  <img src="example/withDoage/LORazepam.svg" width="220" />
+  <img src="example/withDoage/Methoxyfluran.svg" width="220" />
+  <img src="example/withDoage/Naloxon.svg" width="220" />
+  
+</p>
+
 A robust CLI tool and library for generating styled, ISO-compliant (ISO 26825 / DIVI) SVG syringe labels for medical use in critical care and anesthesia. 
 
 It leverages the Gemini Pro API to automatically categorize medications into their appropriate standard color classes, predict standardized emergency bolus dosages vs. concentrations, and applies Tall Man lettering for increased safety. 
@@ -18,6 +25,42 @@ It leverages the Gemini Pro API to automatically categorize medications into the
 - **Tall Man Lettering**: Uses internal libraries (German prioritized over English fallback) to safely format look-alike, sound-alike drug names (e.g., *AmiodarONE*).
 - **Proportional SVG Layout**: Outputs clean, elastic, scalable `.svg` configurations directly. Uses explicit geometric math for cross-platform rendering (consistent in Safari, Chrome, and Figma).
 - **API and CLI Integration**: Fast execution via Bun, or callable as a TypeScript library in other projects.
+
+## Examples
+
+You can review a large output of generated examples in the `example/withDoage` folder. Here are a few notable outcomes that demonstrate the power of the generation logic:
+
+### 1. Complex Tall Man Translation (DiazePAM)
+Correctly breaks out multiple uppercase spans and predicts a standard bolus dose + application route.
+```bash
+bun run mkMediLabels.ts -a -r "diazepam"
+```
+<img src="example/withDoage/DiazePAM.svg" width="220" />
+
+### 2. Inhalation Route Prediction (Methoxyfluran)
+Notice how the API correctly deduces that Methoxyfluran is an inhaled volatile agent, returning `3ml inh.` rather than a systemic mg dose!
+```bash
+bun run mkMediLabels.ts -a -r "Methoxyfluran"
+```
+<img src="example/withDoage/Methoxyfluran.svg" width="220" />
+
+### 3. Antidotes (Naloxon, Flumazenil, Sugammadex)
+
+- Automatic recognition: the generator detects common antidotes/antagonists (e.g., Naloxon, Flumazenil, Sugammadex) and tags them as "Antidote / Antagonist" to improve classification and labeling semantics.
+
+```bash
+bun run mkMediLabels.ts -a -r "Naloxon"
+```
+<img src="example/withDoage/Naloxon.svg" width="220" />
+
+### 4. Write-In / Blank Labels (Standard layout)
+By default (without the `-a` flag), the tool generates generic labels with a standardized dotted line for manual dosage inputs.
+
+```bash
+bun run mkMediLabels.ts "Adrenalin"
+```
+
+<img src="example/withoutDosage/Adrenalin.svg" width="220" />
 
 ## Prerequisites
 - [Bun](https://bun.sh/) (JavaScript runtime)
