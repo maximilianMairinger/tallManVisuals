@@ -1,6 +1,7 @@
 input_meds.txt
 labels/*
 .bun.lockb
+bun.lockb
 .pnpm-lock.yaml
 node_modules
 env
