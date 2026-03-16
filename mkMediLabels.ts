@@ -246,7 +246,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     if (isNaN(scaleInputValue) || scaleInputValue <= 0) {
         throw new Error("Error: scale must be a number greater than 0.");
     }
-    const paddingScale = 1 / scaleInputValue;
+    const paddingScale = 1 / (scaleInputValue * 1.5);
 
     const classesPath = options.classesPath || 'classes.json';
     const germanPath = options.germanPath || 'tallmanGer.csv';
