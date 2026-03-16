@@ -1,6 +1,6 @@
 {
   "name": "tall-man-medis",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "A robust CLI tool and library for generating styled, ISO-compliant SVG syringe labels",
   "main": "mkMediLabels.ts",
   "bin": {
