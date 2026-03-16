@@ -112,15 +112,21 @@ function parseInputMeds(filePath: string): InputMed[] {
 }
 
 function formatTallmanSVG(medName: string): string {
-    const parts = medName.split(/([A-Z]+)/);
-    return parts.map(part => {
+    const parts = medName.split(/([A-ZÄÖÜ]+)/);
+    // Figma BUG workaround: If the text starts directly with a bold tspan, Figma forces the whole block to be bold.
+    // Injecting an invisible normal zero-width-space tspan perfectly roots Figma's initial text node state.
+    const figmaBugFixPrefix = `<tspan font-weight="normal">&#8203;</tspan>`;
+    
+    const formed = parts.map(part => {
         if (!part) return '';
-        if (/^[A-Z]+$/.test(part)) {
+        if (/^[A-ZÄÖÜ]+$/.test(part)) {
             return `<tspan font-weight="bold">${part}</tspan>`;
         } else {
             return `<tspan font-weight="normal">${part}</tspan>`;
         }
     }).join('');
+    
+    return figmaBugFixPrefix + formed;
 }
 
 function generateSVG(medName: string, medClass: MedClass, dosageText: string, isAutoDosage: boolean, paddingScale: number, sizeScale: number): string {
@@ -201,9 +207,9 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
         // Auto-Dosage ON -> Centered text only, NO line
         const parts = dosageText.split(' ');
         if (parts.length > 1) {
-            bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="${22 * sizeScale}" fill="${unitTextHex}">${parts[0]}<tspan font-weight="normal"> ${parts.slice(1).join(' ')}</tspan></text>`;
+            bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY" font-size="${22 * sizeScale}" fill="${textHex}"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="bold">${parts[0]}</tspan><tspan font-weight="normal">&#160;${parts.slice(1).join(' ')}</tspan></text>`;
         } else {
-            bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="${22 * sizeScale}" fill="${unitTextHex}">${dosageText}</text>`;
+            bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY" font-weight="bold" font-size="${22 * sizeScale}" fill="${textHex}">${dosageText}</text>`;
         }
     } else {
         // Auto-Dosage OFF -> Centered Group (Line + Unit text), bottom-aligned
@@ -220,19 +226,19 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
         const parts = dosageText.split(' ');
         if (parts.length > 1) {
             bottomTextSvg = `
-                <line x1="${lineX1}" y1="${bottomY}" x2="${lineX2}" y2="${bottomY}" stroke="${unitTextHex}" stroke-width="${2.5 * sizeScale}" stroke-dasharray="${4 * sizeScale},${8 * sizeScale}" stroke-linecap="round" />
-                <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="${22 * sizeScale}" fill="${unitTextHex}">${parts[0]}<tspan font-weight="normal"> ${parts.slice(1).join(' ')}</tspan></text>
+                <line x1="${lineX1}" y1="${bottomY}" x2="${lineX2}" y2="${bottomY}" stroke="${textHex}" stroke-width="${2.5 * sizeScale}" stroke-dasharray="${4 * sizeScale},${8 * sizeScale}" stroke-linecap="round" />
+                <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY" font-size="${22 * sizeScale}" fill="${textHex}"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="bold">${parts[0]}</tspan><tspan font-weight="normal">&#160;${parts.slice(1).join(' ')}</tspan></text>
             `;
         } else {
             bottomTextSvg = `
-                <line x1="${lineX1}" y1="${bottomY}" x2="${lineX2}" y2="${bottomY}" stroke="${unitTextHex}" stroke-width="${2.5 * sizeScale}" stroke-dasharray="${4 * sizeScale},${8 * sizeScale}" stroke-linecap="round" />
-                <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="${22 * sizeScale}" fill="${unitTextHex}">${dosageText}</text>
+                <line x1="${lineX1}" y1="${bottomY}" x2="${lineX2}" y2="${bottomY}" stroke="${textHex}" stroke-width="${2.5 * sizeScale}" stroke-dasharray="${4 * sizeScale},${8 * sizeScale}" stroke-linecap="round" />
+                <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY" font-weight="bold" font-size="${22 * sizeScale}" fill="${textHex}">${dosageText}</text>
             `;
         }
     }
 
     const textSvg = `
-        <text x="50%" y="${topTextY}" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-size="${32 * sizeScale}" fill="${textHex}">${formattedMedName}</text>
+        <text x="50%" y="${topTextY}" text-anchor="middle" font-family="Averta CY" font-size="${32 * sizeScale}" fill="${textHex}">${formattedMedName}</text>
         ${bottomTextSvg}
     `;
 
