@@ -117,69 +117,105 @@ function formatTallmanSVG(medName: string): string {
     }).join('');
 }
 
-function generateSVG(medName: string, medClass: MedClass, dosageText: string): string {
-    const width = 300;
-    const height = 120;
-    
+function generateSVG(medName: string, medClass: MedClass, dosageText: string, isAutoDosage: boolean, paddingScale: number): string {
     const bgHex = PANTONE_TO_HEX[medClass.backgroundColor] || '#FFFFFF';
     const textHex = PANTONE_TO_HEX[medClass.textColor] || '#000000';
     const unitTextHex = PANTONE_TO_HEX[medClass.unitTextColor] || '#000000';
     
+    // --- Proportional Layout Engine ---
+    
+    // Constants: The physical pixel size of the text (approximate bounds)
+    const text1H = 32;
+    const text2Ascent = 16;  // Height above baseline for 22px font
+    const text2Descent = 5;  // Height below baseline for 22px font
+    const text2H = text2Ascent + text2Descent; // 21
+    const totalSolidH = text1H + text2H; // 53
+
+    // Variables: Elastic Padding blocks (Base sum = 67 when P=1.0)
+    const topEmpty = (medClass.isSplit ? 14 : 29) * paddingScale;
+    const midEmpty = (medClass.isSplit ? 33 : 18) * paddingScale;
+    const botEmpty = 20 * paddingScale;
+    
+    // Canvas Math
+    const newHeight = topEmpty + midEmpty + botEmpty + totalSolidH; 
+    const newWidth = newHeight * 2.5; // Lock aspect ratio exactly
+    const rx = 10 * paddingScale; // Scale the rounded corners proportionally
+
+    // Y-Coordinate Map
+    const topTextY = topEmpty + (text1H / 2); // Center of top text
+    const bottomY = topEmpty + text1H + midEmpty + text2Ascent; // Exact baseline of bottom text
+    const splitLineY = topEmpty + text1H + (9 * paddingScale);
+
     let backgroundSvg = '';
 
     if (medClass.isStriped && medClass.secondaryBackgroundColor) {
         const stripeHex = PANTONE_TO_HEX[medClass.secondaryBackgroundColor] || '#000000';
+        const inset = 15 * paddingScale;
         backgroundSvg = `
             <defs>
                 <pattern id="stripes" width="20" height="20" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
                     <line x1="0" y1="0" x2="0" y2="20" stroke="${stripeHex}" stroke-width="15" />
                 </pattern>
             </defs>
-            <rect width="100%" height="100%" fill="url(#stripes)" rx="10" />
-            <rect x="15" y="15" width="270" height="90" fill="#FFFFFF" rx="5" />
+            <rect width="100%" height="100%" fill="url(#stripes)" rx="${rx}" />
+            <rect x="${inset}" y="${inset}" width="${newWidth - 2*inset}" height="${newHeight - 2*inset}" fill="#FFFFFF" rx="${rx * 0.5}" />
         `;
     } 
     else if (medClass.isSplit && medClass.secondaryBackgroundColor) {
         const bottomHex = PANTONE_TO_HEX[medClass.secondaryBackgroundColor] || '#000000';
+        // Precise Bezier curve math for the top corners so they don't deform during scaling
+        const cp = rx * 0.55228; 
+        const splitPath = `M 0 ${rx} C 0 ${rx - cp} ${rx - cp} 0 ${rx} 0 L ${newWidth - rx} 0 C ${newWidth - rx + cp} 0 ${newWidth} ${rx - cp} ${newWidth} ${rx} L ${newWidth} ${splitLineY} L 0 ${splitLineY} Z`;
+        
         backgroundSvg = `
-            <rect width="100%" height="100%" fill="${bottomHex}" rx="10" />
-            <path d="M 0 10 C 0 4.477 4.477 0 10 0 L 290 0 C 295.523 0 300 4.477 300 10 L 300 55 L 0 55 Z" fill="${bgHex}" />
+            <rect width="100%" height="100%" fill="${bottomHex}" rx="${rx}" />
+            <path d="${splitPath}" fill="${bgHex}" />
         `;
     }
     else if (medClass.hasBorder && medClass.borderColor) {
         const borderHex = PANTONE_TO_HEX[medClass.borderColor] || '#000000';
+        const borderInset = 4 * paddingScale;
+        const borderStroke = 8 * paddingScale;
         backgroundSvg = `
-            <rect x="4" y="4" width="292" height="112" fill="${bgHex}" stroke="${borderHex}" stroke-width="8" rx="10" />
+            <rect x="${borderInset}" y="${borderInset}" width="${newWidth - 2*borderInset}" height="${newHeight - 2*borderInset}" fill="${bgHex}" stroke="${borderHex}" stroke-width="${borderStroke}" rx="${rx}" />
         `;
     }
     else {
         backgroundSvg = `
-            <rect width="100%" height="100%" fill="${bgHex}" rx="10" />
+            <rect width="100%" height="100%" fill="${bgHex}" rx="${rx}" />
         `;
     }
 
     const formattedMedName = formatTallmanSVG(medName);
-    
-    const lineX1 = 30;
-    const lineX2 = 140;
-    const textX = 150; 
-    let textSvg = '';
+    let bottomTextSvg = '';
 
-    if (medClass.isSplit) {
-        textSvg = `
-            <text x="50%" y="30" dominant-baseline="middle" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-size="32" fill="${textHex}">${formattedMedName}</text>
-            <line x1="${lineX1}" y1="95" x2="${lineX2}" y2="95" stroke="${unitTextHex}" stroke-width="2.5" stroke-dasharray="4,8" stroke-linecap="round" />
-            <text x="${textX}" y="95" dominant-baseline="middle" text-anchor="start" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="20" fill="${unitTextHex}">${dosageText}</text>
-        `;
+    if (isAutoDosage) {
+        // Auto-Dosage ON -> Centered text only, NO line
+        bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="22" fill="${unitTextHex}">${dosageText}</text>`;
     } else {
-        textSvg = `
-            <text x="50%" y="45" dominant-baseline="middle" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-size="32" fill="${textHex}">${formattedMedName}</text>
-            <line x1="${lineX1}" y1="95" x2="${lineX2}" y2="95" stroke="${unitTextHex}" stroke-width="2.5" stroke-dasharray="4,8" stroke-linecap="round" />
-            <text x="${textX}" y="95" dominant-baseline="middle" text-anchor="start" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="20" fill="${unitTextHex}">${dosageText}</text>
+        // Auto-Dosage OFF -> Centered Group (Line + Unit text), bottom-aligned
+        const lineLen = 90 * paddingScale;
+        const gap = 8 * paddingScale;
+        const approxTextWidth = dosageText.length * 12.5; 
+        const totalWidth = lineLen + gap + approxTextWidth;
+        
+        const startX = (newWidth / 2) - (totalWidth / 2);
+        const lineX1 = startX;
+        const lineX2 = startX + lineLen;
+        const textX = lineX2 + gap;
+
+        bottomTextSvg = `
+            <line x1="${lineX1}" y1="${bottomY}" x2="${lineX2}" y2="${bottomY}" stroke="${unitTextHex}" stroke-width="2.5" stroke-dasharray="4,8" stroke-linecap="round" />
+            <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="22" fill="${unitTextHex}">${dosageText}</text>
         `;
     }
 
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    const textSvg = `
+        <text x="50%" y="${topTextY}" dominant-baseline="middle" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-size="32" fill="${textHex}">${formattedMedName}</text>
+        ${bottomTextSvg}
+    `;
+
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${newWidth}" height="${newHeight}" viewBox="0 0 ${newWidth} ${newHeight}">
         ${backgroundSvg}
         ${textSvg}
     </svg>`;
@@ -199,10 +235,20 @@ async function main() {
         .option('-i, --input <path>', 'Path to the input text file (comma separated)', 'input_meds.txt')
         .option('-o, --output <dir>', 'Directory to save the generated SVG files', './labels')
         .option('-a, --auto-dosage', 'Automatically fetch absolute adult IV bolus dosages (e.g., 5 mg) via API', false)
-        .option('-C, --concentration', 'If auto-dosage is enabled, fetch concentration (e.g., 10 mg/ml) instead of absolute dose', false);
+        .option('-C, --concentration', 'If auto-dosage is enabled, fetch concentration (e.g., 10 mg/ml). If disabled, infers concentration unit.', false)
+        .option('-s, --scale <number>', 'Scale multiplier for text relative to label size. Larger means smaller padding (default: 1.0)', '1.0');
 
     program.parse(process.argv);
     const options = program.opts();
+
+    // --- Core Inversion Math ---
+    const scaleInputValue = parseFloat(options.scale);
+    if (isNaN(scaleInputValue) || scaleInputValue <= 0) {
+        console.error("Error: --scale must be a number greater than 0.");
+        process.exit(1);
+    }
+    // Invert the scale so larger S -> smaller padding (approaching 0 at infinity)
+    const paddingScale = 1 / scaleInputValue;
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -227,9 +273,8 @@ async function main() {
 
     console.log(`Loaded ${tallmanMap.size} unique Tall Man lettering entries.`);
     console.log(`Auto-dosage resolution: ${options.autoDosage ? "ON" : "OFF"}`);
-    if (options.autoDosage) {
-        console.log(`Resolution Mode: ${options.concentration ? "Concentration (e.g., mg/ml)" : "Absolute Bolus Dose (e.g., mg)"}`);
-    }
+    console.log(`Resolution Mode: ${options.concentration ? "Concentration (e.g., mg/ml)" : "Absolute Bolus Dose (e.g., mg)"}`);
+    console.log(`Text Scale: ${scaleInputValue} (Padding Multiplier: ${paddingScale.toFixed(2)})`);
 
     const inputMeds = parseInputMeds(options.input);
     if (inputMeds.length === 0) {
@@ -298,55 +343,78 @@ async function main() {
         }
 
         // 2. Setup Dosage Promise
+        let dosagePrompt = "";
+        
         if (options.autoDosage) {
-            let dosagePrompt = "";
-            
             if (options.concentration) {
-                // Legacy behavior: Concentration
                 dosagePrompt = `
                 You are an expert emergency physician/paramedic operating in Austria/Europe.
                 What is the standard pre-filled syringe or standard ampule/drawing concentration for the emergency medication "${tallmanName}"?
                 Instructions:
                 1. Respond ONLY with the numerical value and unit (e.g., "1 mg/ml", "50 mcg/ml", "1000 IE/ml", "0.5 mg/ml").
                 2. Do not include any text, markdown, or explanation.
-                3. If there are multiple, provide the single most common adult emergency concentration.
+                3. If there are multiple, provide the single most common adult emergency concentration. DO NOT provide ranges or weight-based doses.
                 `;
             } else {
-                // New default behavior: Absolute Bolus Dose
                 dosagePrompt = `
                 You are an expert emergency physician/paramedic operating in Austria/Europe.
                 What is the standard absolute single-dose for one-time IV bolus administration for the emergency medication "${tallmanName}"?
                 Instructions:
                 1. Respond ONLY with the numerical value and unit (e.g., "5 mg", "1 g", "50 mcg", "10 IE").
                 2. Do not include any text, markdown, or explanation.
-                3. If there are multiple, provide the single most common adult emergency bolus dose.
+                3. If there are multiple, provide the single most common adult emergency bolus dose. DO NOT provide ranges or weight-based doses.
                 `;
             }
-            
-            dosagePromise = model.generateContent(dosagePrompt).then(res => {
-                let text = res.response.text().trim();
-                if (text.length > 15 || text.includes('\n')) {
-                    return options.concentration ? "mg/ml" : "mg";
-                }
-                return text;
-            }).catch(err => {
-                console.error(`❌ API Error fetching dosage for ${tallmanName}:`, err);
-                return options.concentration ? "mg/ml" : "mg";
-            });
         } else {
-            // Default placeholder text
-            dosagePromise = Promise.resolve(options.concentration ? "mg/ml" : "mg");
+            // Auto dosage OFF -> Infer ONLY the Unit (no numbers)
+            if (options.concentration) {
+                dosagePrompt = `
+                You are an expert emergency physician/paramedic operating in Austria/Europe.
+                What is the standard unit of concentration for the emergency medication "${tallmanName}"?
+                Instructions:
+                1. Respond ONLY with the unit itself (e.g., "mg/ml", "mcg/ml", "IE/ml").
+                2. DO NOT include any numbers.
+                3. Do not include any text, markdown, or explanation.
+                `;
+            } else {
+                dosagePrompt = `
+                You are an expert emergency physician/paramedic operating in Austria/Europe.
+                What is the standard unit for an absolute single-dose IV bolus of the emergency medication "${tallmanName}"?
+                Instructions:
+                1. Respond ONLY with the unit itself (e.g., "mg", "mcg", "g", "IE").
+                2. DO NOT include any numbers.
+                3. Do not include any text, markdown, or explanation.
+                `;
+            }
         }
+        
+        dosagePromise = model.generateContent(dosagePrompt).then(res => {
+            let text = res.response.text().trim();
+            
+            if (text.length > 15 || text.includes('\n')) {
+                return options.concentration ? "mg/ml" : "mg";
+            }
+            
+            if (!options.autoDosage) {
+                text = text.replace(/[0-9.]/g, '').trim();
+                if (!text) return options.concentration ? "mg/ml" : "mg";
+            }
+            
+            return text;
+        }).catch(err => {
+            console.error(`❌ API Error fetching dosage for ${tallmanName}:`, err);
+            return options.concentration ? "mg/ml" : "mg";
+        });
 
         // Execute API calls concurrently
-        const [resolvedClass, resolvedDosage] = await Promise.all([classPromise, dosagePromise]);
+        const[resolvedClass, resolvedDosage] = await Promise.all([classPromise, dosagePromise]);
         
         assignedClass = resolvedClass;
         console.log(` > Assigned Class: ${assignedClass}`);
-        if (options.autoDosage) console.log(` > Discovered Dosage: ${resolvedDosage}`);
+        console.log(` > Discovered Text: ${resolvedDosage}`);
 
         const classStyle = classesData[assignedClass] || classesData["Other"];
-        const svgContent = generateSVG(tallmanName, classStyle, resolvedDosage);
+        const svgContent = generateSVG(tallmanName, classStyle, resolvedDosage, options.autoDosage, paddingScale);
         const safeFilename = tallmanName.replace(/[^a-zA-Z0-9]/gi, '_');
         const outputPath = `${options.output}/${safeFilename}.svg`;
         
