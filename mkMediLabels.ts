@@ -306,7 +306,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     }
 
     if (!options.apiKey) {
-        throw new Error("Error: API key is required.");
+        throw new Error("Missing Google Gemini API Key. Expected 'apiKey' in the generator options or process.env.GEMINI_API_KEY.");
     }
     const ai = new GoogleGenAI({ apiKey: options.apiKey });
 
@@ -541,7 +541,12 @@ Examples:
     }
 
     if (!apiKey) {
-        console.error("Error: GEMINI_API_KEY environment variable is missing, and no --api-key or --api-key-file provided.");
+        console.error("\x1b[31mError: Missing Google Gemini API Key!\x1b[0m\n");
+        console.error("This tool requires a Gemini API key to intelligently categorize medications and predict dosages.");
+        console.error("You can get a free API key here: \x1b[34mhttps://aistudio.google.com/app/apikey\x1b[0m\n");
+        console.error("Once you have the key, provide it by either:");
+        console.error("  1. Exporting the environment variable: \x1b[33mexport GEMINI_API_KEY='your_key'\x1b[0m");
+        console.error("  2. Passing it via the CLI flag: \x1b[33m--api-key 'your_key'\x1b[0m");
         process.exit(1);
     }
 
