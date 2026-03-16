@@ -236,13 +236,17 @@ async function main() {
         .option('-o, --output <dir>', 'Directory to save the generated SVG files', './labels')
         .option('-a, --auto-dosage', 'Automatically fetch absolute adult IV bolus dosages (e.g., 5 mg) via API', false)
         .option('-C, --concentration', 'If auto-dosage is enabled, fetch concentration (e.g., 10 mg/ml). If disabled, infers concentration unit.', false)
-        .option('-s, --scale <number>', 'Scale multiplier for text relative to label size. Larger means smaller padding (default: 1.0)', '1.0');
+        .option('-s, --scale <number>', 'Scale multiplier for text relative to label size. Larger means smaller padding (default: 1.0)', '1.0')
+        .option('-k, --api-key <string>', 'Gemini API key as plaintext')
+        .option('-K, --api-key-file <path>', 'Path to file containing Gemini API key');
 
     program.parse(process.argv);
     const options = program.opts();
 
     // --- Core Inversion Math ---
-    const scaleInputValue = parseFloat(options.scale);
+    let scaleInputValueStr = options.scale;
+    if (typeof options.scale === 'boolean') scaleInputValueStr = '1.0'; // Default, commander parser quirk
+    const scaleInputValue = parseFloat(scaleInputValueStr);
     if (isNaN(scaleInputValue) || scaleInputValue <= 0) {
         console.error("Error: --scale must be a number greater than 0.");
         process.exit(1);
@@ -250,9 +254,19 @@ async function main() {
     // Invert the scale so larger S -> smaller padding (approaching 0 at infinity)
     const paddingScale = 1 / scaleInputValue;
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    let apiKey = process.env.GEMINI_API_KEY;
+    if (options.apiKey) {
+        apiKey = options.apiKey;
+    } else if (options.apiKeyFile) {
+        if (!fs.existsSync(options.apiKeyFile)) {
+            console.error(`Error: API key file not found at ${options.apiKeyFile}`);
+            process.exit(1);
+        }
+        apiKey = fs.readFileSync(options.apiKeyFile, 'utf-8').trim();
+    }
+
     if (!apiKey) {
-        console.error("Error: GEMINI_API_KEY environment variable is missing.");
+        console.error("Error: GEMINI_API_KEY environment variable is missing, and no --api-key or --api-key-file provided.");
         process.exit(1);
     }
     const genAI = new GoogleGenerativeAI(apiKey);
