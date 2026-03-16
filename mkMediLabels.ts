@@ -131,7 +131,9 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
     // --- Proportional Layout Engine ---
     
     // Constants: The physical pixel size of the text (approximate bounds)
-    const text1H = 32;
+    const text1Ascent = 24;  // Height above baseline for 32px font
+    const text1Descent = 8;  // Height below baseline for 32px font
+    const text1H = text1Ascent + text1Descent; // 32
     const text2Ascent = 16;  // Height above baseline for 22px font
     const text2Descent = 5;  // Height below baseline for 22px font
     const text2H = text2Ascent + text2Descent; // 21
@@ -148,7 +150,7 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
     const rx = 10 * paddingScale; // Scale the rounded corners proportionally
 
     // Y-Coordinate Map
-    const topTextY = topEmpty + (text1H / 2); // Center of top text
+    const topTextY = topEmpty + text1Ascent; // Exact baseline of top text
     const bottomY = topEmpty + text1H + midEmpty + text2Ascent; // Exact baseline of bottom text
     const splitLineY = topEmpty + text1H + (9 * paddingScale);
 
@@ -217,7 +219,7 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
     }
 
     const textSvg = `
-        <text x="50%" y="${topTextY}" dominant-baseline="middle" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-size="32" fill="${textHex}">${formattedMedName}</text>
+        <text x="50%" y="${topTextY}" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-size="32" fill="${textHex}">${formattedMedName}</text>
         ${bottomTextSvg}
     `;
 
@@ -266,7 +268,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
             contents: promptStr,
             config: {
                 thinkingConfig: {
-                    thinkingLevel: 'MINIMAL',
+                    thinkingLevel: 'low',
                 },
             },
         }
@@ -381,11 +383,11 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
             } else {
                 dosagePrompt = `
                 You are an expert emergency physician/paramedic operating in Austria/Europe.
-                What is the standard absolute single-dose for one-time IV bolus administration for the emergency medication "${tallmanName}"?
+                What is the standard absolute single-dose for one-time IV bolus or single-dose inhalation/application administration for the emergency medication "${tallmanName}"?
                 Instructions:
-                1. Respond ONLY with the numerical value and unit (e.g., "5 mg", "1 g", "50 mcg", "10 IE").
+                1. Respond ONLY with the numerical value and unit (e.g., "5 mg", "1 g", "50 mcg", "10 IE", "3 ml").
                 2. Do not include any text, markdown, or explanation.
-                3. If there are multiple, provide the single most common adult emergency bolus dose. DO NOT provide ranges or weight-based doses.
+                3. If there are multiple, provide the single most common adult emergency bolus/single dose. DO NOT provide ranges or weight-based doses.
                 `;
             }
         } else {
