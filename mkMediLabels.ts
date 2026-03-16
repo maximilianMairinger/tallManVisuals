@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { Command } from 'commander';
 
 const PANTONE_TO_HEX: Record<string, string> = {
@@ -238,6 +238,7 @@ export interface GenerateMediLabelsOptions {
     autoDosage?: boolean;
     concentration?: boolean;
     scale?: number | string;
+    modelName?: string;
 }
 
 export async function generateMediLabels(options: GenerateMediLabelsOptions) {
@@ -256,12 +257,25 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     const outputDir = options.outputDir || './labels';
     const autoDosage = options.autoDosage || false;
     const concentration = options.concentration || false;
+    const modelName = options.modelName || 'gemini-3.1-flash-lite-preview';
+
+
+    const prompt = (promptStr: string) => {
+        return {
+            model: modelName,
+            contents: promptStr,
+            config: {
+                thinkingConfig: {
+                    thinkingLevel: 'MINIMAL',
+                },
+            },
+        }
+    }
 
     if (!options.apiKey) {
         throw new Error("Error: API key is required.");
     }
-    const genAI = new GoogleGenerativeAI(options.apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+    const ai = new GoogleGenAI({ apiKey: options.apiKey });
 
     if (!fs.existsSync(classesPath)) {
         throw new Error(`Error: Missing classes definition file at ${classesPath}`);
@@ -295,7 +309,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
         fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    for (const inputObj of options.medications) {
+    const promises = options.medications.map(async (inputObj) => {
         const rawName = inputObj.name;
         const searchKey = rawName.toLowerCase();
         const tallmanName = tallmanMap.get(searchKey) || rawName;
@@ -334,8 +348,10 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
             2. If you are not absolutely sure, or if it doesn't clearly fit into any specific category, output "Other".
             `;
 
-            classPromise = model.generateContent(classPrompt).then(res => {
-                let text = res.response.text().trim();
+            const startClassTiming = performance.now();
+            classPromise = ai.models.generateContent(prompt(classPrompt)).then(res => {
+                console.log(` > [Timing] Class API: ${(performance.now() - startClassTiming).toFixed(0)}ms`);
+                let text = (res.text || '').trim();
                 let matchingKey = validTargetKeys.find(k => k.toLowerCase() === text.toLowerCase());
                 
                 if (matchingKey) return matchingKey;
@@ -395,8 +411,10 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
             }
         }
         
-        dosagePromise = model.generateContent(dosagePrompt).then(res => {
-            let text = res.response.text().trim();
+        const startDosageTiming = performance.now();
+        dosagePromise = ai.models.generateContent(prompt(dosagePrompt)).then(res => {
+            console.log(` > [Timing] Dosage API: ${(performance.now() - startDosageTiming).toFixed(0)}ms`);
+            let text = (res.text || '').trim();
             
             if (text.length > 15 || text.includes('\n')) {
                 return concentration ? "mg/ml" : "mg";
@@ -427,7 +445,9 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
         
         fs.writeFileSync(outputPath, svgContent);
         console.log(` > Saved to ${outputPath}`);
-    }
+    });
+
+    await Promise.all(promises);
 
     console.log("\nDone!");
 }
@@ -460,6 +480,7 @@ Examples:
         .option('-a, --auto-dosage', 'Automatically fetch absolute adult IV bolus dosages (e.g., 5 mg) via API', false)
         .option('-C, --concentration', 'If auto-dosage is enabled, fetch concentration (e.g., 10 mg/ml). If disabled, infers concentration unit.', false)
         .option('-s, --scale <number>', 'Scale multiplier for text relative to label size. Larger means smaller padding (default: 1.0)', '1.0')
+        .option('--model <string>', 'Gemini API model to use', 'gemini-3-flash-preview')
         .option('-k, --api-key <string>', 'Gemini API key as plaintext')
         .option('-K, --api-key-file <path>', 'Path to file containing Gemini API key')
         .argument('[meds...]', 'Direct medications as positional arguments');
@@ -510,7 +531,8 @@ Examples:
             outputDir: options.output,
             autoDosage: options.autoDosage,
             concentration: options.concentration,
-            scale: options.scale
+            scale: options.scale,
+            modelName: options.model
         });
     } catch (e: any) {
         console.error(e.message);
