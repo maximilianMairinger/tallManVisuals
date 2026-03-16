@@ -233,6 +233,7 @@ export interface GenerateMediLabelsOptions {
     classesPath?: string;
     germanPath?: string;
     englishPath?: string;
+    languagePriority?: 'german' | 'english';
     outputDir?: string;
     autoDosage?: boolean;
     concentration?: boolean;
@@ -251,6 +252,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     const classesPath = options.classesPath || 'classes.json';
     const germanPath = options.germanPath || 'tallmanGer.csv';
     const englishPath = options.englishPath || 'tallmanEngl.csv';
+    const languagePriority = options.languagePriority || 'german';
     const outputDir = options.outputDir || './labels';
     const autoDosage = options.autoDosage || false;
     const concentration = options.concentration || false;
@@ -269,9 +271,15 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     
     const tallmanMap = new Map<string, string>();
     const englishMap = parseTallmanCSV(englishPath);
-    for (const[key, val] of englishMap.entries()) { tallmanMap.set(key, val); }
     const germanMap = parseTallmanCSV(germanPath);
-    for (const [key, val] of germanMap.entries()) { tallmanMap.set(key, val); }
+
+    if (languagePriority === 'english') {
+        for (const [key, val] of germanMap.entries()) { tallmanMap.set(key, val); }
+        for (const [key, val] of englishMap.entries()) { tallmanMap.set(key, val); }
+    } else {
+        for (const [key, val] of englishMap.entries()) { tallmanMap.set(key, val); }
+        for (const [key, val] of germanMap.entries()) { tallmanMap.set(key, val); }
+    }
 
     console.log(`Loaded ${tallmanMap.size} unique Tall Man lettering entries.`);
     console.log(`Auto-dosage resolution: ${autoDosage ? "ON" : "OFF"}`);
@@ -430,11 +438,22 @@ async function main() {
     
     program
         .name('mkMediLabels')
-        .description('Generates styled SVG syringe labels based on ISO color standards using LLM categorization.')
+        .description(`Generates styled SVG syringe labels based on ISO color standards using LLM categorization.
+        
+TLDR:
+Generates ISO-compliant syringe labels as scalable SVGs. It uses the Gemini API to map medications to 
+standardized color classes (e.g., Opioids = Blue), applies Tall Man lettering for safety, and can optionaly 
+predict standard absolute dosages or concentrations.
+
+Examples:
+  bun run mkMediLabels.ts -f input_meds.txt
+  bun run mkMediLabels.ts -m "Amiodaron, Fentanyl"
+  bun run mkMediLabels.ts Adrenalin Suxamethonium "Propofol (Hypnotics)"`)
         .version('1.0.0')
         .option('-c, --classes <path>', 'Path to classes.json', 'classes.json')
         .option('-g, --german <path>', 'Path to tallmanGer.csv', 'tallmanGer.csv')
         .option('-e, --english <path>', 'Path to tallmanEngl.csv', 'tallmanEngl.csv')
+        .option('-l, --language-priority <german|english>', 'Which language takes precedence for Tall Man lettering matching', 'german')        
         .option('-f, --medications-file <path>', 'Path to the input text file (comma separated)', 'input_meds.txt')
         .option('-m, --medications <string>', 'Direct input of medications as a comma-separated string')
         .option('-o, --output <dir>', 'Directory to save the generated SVG files', './labels')
@@ -487,6 +506,7 @@ async function main() {
             classesPath: options.classes,
             germanPath: options.german,
             englishPath: options.english,
+            languagePriority: options.languagePriority,
             outputDir: options.output,
             autoDosage: options.autoDosage,
             concentration: options.concentration,
