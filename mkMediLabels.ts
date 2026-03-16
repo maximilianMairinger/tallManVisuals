@@ -123,7 +123,7 @@ function formatTallmanSVG(medName: string): string {
     }).join('');
 }
 
-function generateSVG(medName: string, medClass: MedClass, dosageText: string, isAutoDosage: boolean, paddingScale: number): string {
+function generateSVG(medName: string, medClass: MedClass, dosageText: string, isAutoDosage: boolean, paddingScale: number, sizeScale: number): string {
     const bgHex = PANTONE_TO_HEX[medClass.backgroundColor] || '#FFFFFF';
     const textHex = PANTONE_TO_HEX[medClass.textColor] || '#000000';
     const unitTextHex = PANTONE_TO_HEX[medClass.unitTextColor] || '#000000';
@@ -131,38 +131,38 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
     // --- Proportional Layout Engine ---
     
     // Constants: The physical pixel size of the text (approximate bounds)
-    const text1Ascent = 24;  // Height above baseline for 32px font
-    const text1Descent = 8;  // Height below baseline for 32px font
-    const text1H = text1Ascent + text1Descent; // 32
-    const text2Ascent = 16;  // Height above baseline for 22px font
-    const text2Descent = 5;  // Height below baseline for 22px font
-    const text2H = text2Ascent + text2Descent; // 21
-    const totalSolidH = text1H + text2H; // 53
+    const text1Ascent = 24 * sizeScale;  // Height above baseline for 32px font
+    const text1Descent = 8 * sizeScale;  // Height below baseline for 32px font
+    const text1H = text1Ascent + text1Descent; 
+    const text2Ascent = 16 * sizeScale;  // Height above baseline for 22px font
+    const text2Descent = 5 * sizeScale;  // Height below baseline for 22px font
+    const text2H = text2Ascent + text2Descent;
+    const totalSolidH = text1H + text2H;
 
     // Variables: Elastic Padding blocks (Base sum = 67 when P=1.0)
-    const topEmpty = (medClass.isSplit ? 14 : 29) * paddingScale;
-    const midEmpty = (medClass.isSplit ? 33 : 18) * paddingScale;
-    const botEmpty = 20 * paddingScale;
+    const topEmpty = (medClass.isSplit ? 14 : 29) * paddingScale * sizeScale;
+    const midEmpty = (medClass.isSplit ? 33 : 18) * paddingScale * sizeScale;
+    const botEmpty = 20 * paddingScale * sizeScale;
     
     // Canvas Math
     const newHeight = topEmpty + midEmpty + botEmpty + totalSolidH; 
     const newWidth = newHeight * 2.5; // Lock aspect ratio exactly
-    const rx = 10 * paddingScale; // Scale the rounded corners proportionally
+    const rx = 10 * paddingScale * sizeScale; // Scale the rounded corners proportionally
 
     // Y-Coordinate Map
     const topTextY = topEmpty + text1Ascent; // Exact baseline of top text
-    const bottomY = topEmpty + text1H + midEmpty + text2Ascent; // Exact baseline of bottom text
-    const splitLineY = topEmpty + text1H + (9 * paddingScale);
+    const bottomY = topEmpty + text1H + midEmpty + text2Ascent - (3 * sizeScale); // Exact baseline of bottom text, shifted up slightly
+    const splitLineY = topEmpty + text1H + (9 * paddingScale * sizeScale);
 
     let backgroundSvg = '';
 
     if (medClass.isStriped && medClass.secondaryBackgroundColor) {
         const stripeHex = PANTONE_TO_HEX[medClass.secondaryBackgroundColor] || '#000000';
-        const inset = 15 * paddingScale;
+        const inset = 15 * paddingScale * sizeScale;
         backgroundSvg = `
             <defs>
-                <pattern id="stripes" width="20" height="20" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
-                    <line x1="0" y1="0" x2="0" y2="20" stroke="${stripeHex}" stroke-width="15" />
+                <pattern id="stripes" width="${20 * sizeScale}" height="${20 * sizeScale}" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+                    <line x1="0" y1="0" x2="0" y2="${20 * sizeScale}" stroke="${stripeHex}" stroke-width="${15 * sizeScale}" />
                 </pattern>
             </defs>
             <rect width="100%" height="100%" fill="url(#stripes)" rx="${rx}" />
@@ -182,8 +182,8 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
     }
     else if (medClass.hasBorder && medClass.borderColor) {
         const borderHex = PANTONE_TO_HEX[medClass.borderColor] || '#000000';
-        const borderInset = 4 * paddingScale;
-        const borderStroke = 8 * paddingScale;
+        const borderInset = 4 * paddingScale * sizeScale;
+        const borderStroke = 8 * paddingScale * sizeScale;
         backgroundSvg = `
             <rect x="${borderInset}" y="${borderInset}" width="${newWidth - 2*borderInset}" height="${newHeight - 2*borderInset}" fill="${bgHex}" stroke="${borderHex}" stroke-width="${borderStroke}" rx="${rx}" />
         `;
@@ -199,12 +199,17 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
 
     if (isAutoDosage) {
         // Auto-Dosage ON -> Centered text only, NO line
-        bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="22" fill="${unitTextHex}">${dosageText}</text>`;
+        const parts = dosageText.split(' ');
+        if (parts.length > 1) {
+            bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="${22 * sizeScale}" fill="${unitTextHex}">${parts[0]}<tspan font-weight="normal"> ${parts.slice(1).join(' ')}</tspan></text>`;
+        } else {
+            bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="${22 * sizeScale}" fill="${unitTextHex}">${dosageText}</text>`;
+        }
     } else {
         // Auto-Dosage OFF -> Centered Group (Line + Unit text), bottom-aligned
-        const lineLen = 90 * paddingScale;
-        const gap = 8 * paddingScale;
-        const approxTextWidth = dosageText.length * 12.5; 
+        const lineLen = 90 * paddingScale * sizeScale;
+        const gap = 8 * paddingScale * sizeScale;
+        const approxTextWidth = dosageText.length * 12.5 * sizeScale; 
         const totalWidth = lineLen + gap + approxTextWidth;
         
         const startX = (newWidth / 2) - (totalWidth / 2);
@@ -212,14 +217,22 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
         const lineX2 = startX + lineLen;
         const textX = lineX2 + gap;
 
-        bottomTextSvg = `
-            <line x1="${lineX1}" y1="${bottomY}" x2="${lineX2}" y2="${bottomY}" stroke="${unitTextHex}" stroke-width="2.5" stroke-dasharray="4,8" stroke-linecap="round" />
-            <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="22" fill="${unitTextHex}">${dosageText}</text>
-        `;
+        const parts = dosageText.split(' ');
+        if (parts.length > 1) {
+            bottomTextSvg = `
+                <line x1="${lineX1}" y1="${bottomY}" x2="${lineX2}" y2="${bottomY}" stroke="${unitTextHex}" stroke-width="${2.5 * sizeScale}" stroke-dasharray="${4 * sizeScale},${8 * sizeScale}" stroke-linecap="round" />
+                <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="${22 * sizeScale}" fill="${unitTextHex}">${parts[0]}<tspan font-weight="normal"> ${parts.slice(1).join(' ')}</tspan></text>
+            `;
+        } else {
+            bottomTextSvg = `
+                <line x1="${lineX1}" y1="${bottomY}" x2="${lineX2}" y2="${bottomY}" stroke="${unitTextHex}" stroke-width="${2.5 * sizeScale}" stroke-dasharray="${4 * sizeScale},${8 * sizeScale}" stroke-linecap="round" />
+                <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY, Arial, sans-serif" font-weight="bold" font-size="${22 * sizeScale}" fill="${unitTextHex}">${dosageText}</text>
+            `;
+        }
     }
 
     const textSvg = `
-        <text x="50%" y="${topTextY}" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-size="32" fill="${textHex}">${formattedMedName}</text>
+        <text x="50%" y="${topTextY}" text-anchor="middle" font-family="Averta CY, Arial, sans-serif" font-size="${32 * sizeScale}" fill="${textHex}">${formattedMedName}</text>
         ${bottomTextSvg}
     `;
 
@@ -239,7 +252,9 @@ export interface GenerateMediLabelsOptions {
     outputDir?: string;
     autoDosage?: boolean;
     concentration?: boolean;
+    route?: boolean;
     scale?: number | string;
+    sizeScale?: number | string;
     modelName?: string;
 }
 
@@ -252,6 +267,14 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     }
     const paddingScale = 1 / (scaleInputValue * 1.5);
 
+    let sizeScaleValueStr = options.sizeScale;
+    if (typeof options.sizeScale === 'boolean' || options.sizeScale === undefined) sizeScaleValueStr = '1.0';
+    const parsedSizeScale = typeof sizeScaleValueStr === 'number' ? sizeScaleValueStr : parseFloat(sizeScaleValueStr as string);
+    if (isNaN(parsedSizeScale) || parsedSizeScale <= 0) {
+        throw new Error("Error: size-scale must be a number greater than 0.");
+    }
+    const sizeScale = parsedSizeScale * 0.9;
+
     const classesPath = options.classesPath || 'classes.json';
     const germanPath = options.germanPath || 'tallmanGer.csv';
     const englishPath = options.englishPath || 'tallmanEngl.csv';
@@ -259,6 +282,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     const outputDir = options.outputDir || './labels';
     const autoDosage = options.autoDosage || false;
     const concentration = options.concentration || false;
+    const route = options.route || false;
     const modelName = options.modelName || 'gemini-3.1-flash-lite-preview';
 
 
@@ -301,6 +325,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     console.log(`Auto-dosage resolution: ${autoDosage ? "ON" : "OFF"}`);
     console.log(`Resolution Mode: ${concentration ? "Concentration (e.g., mg/ml)" : "Absolute Bolus Dose (e.g., mg)"}`);
     console.log(`Text Scale: ${scaleInputValue} (Padding Multiplier: ${paddingScale.toFixed(2)})`);
+    console.log(`Size Scale: ${sizeScale}`);
 
     if (options.medications.length === 0) {
         console.log(`No medications provided.`);
@@ -376,7 +401,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
                 You are an expert emergency physician/paramedic operating in Austria/Europe.
                 What is the standard pre-filled syringe or standard ampule/drawing concentration for the emergency medication "${tallmanName}"?
                 Instructions:
-                1. Respond ONLY with the numerical value and unit (e.g., "1 mg/ml", "50 mcg/ml", "1000 IE/ml", "0.5 mg/ml").
+                1. Respond ONLY with the numerical value, unit${route ? ', and administration route' : ''} (e.g., "1 mg/ml"${route ? ' i.v.' : ''}, "50 mcg/ml", "1000 IE/ml", "0.5 mg/ml").
                 2. Do not include any text, markdown, or explanation.
                 3. If there are multiple, provide the single most common adult emergency concentration. DO NOT provide ranges or weight-based doses.
                 `;
@@ -385,7 +410,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
                 You are an expert emergency physician/paramedic operating in Austria/Europe.
                 What is the standard absolute single-dose for one-time IV bolus or single-dose inhalation/application administration for the emergency medication "${tallmanName}"?
                 Instructions:
-                1. Respond ONLY with the numerical value and unit (e.g., "5 mg", "1 g", "50 mcg", "10 IE", "3 ml").
+                1. Respond ONLY with the numerical value, unit${route ? ', and administration route' : ''} (e.g., "5 mg"${route ? ' i.v.' : ''}, "1 g", "50 mcg", "10 IE", "3 ml"${route ? ' inh.' : ''}).
                 2. Do not include any text, markdown, or explanation.
                 3. If there are multiple, provide the single most common adult emergency bolus/single dose. DO NOT provide ranges or weight-based doses.
                 `;
@@ -397,7 +422,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
                 You are an expert emergency physician/paramedic operating in Austria/Europe.
                 What is the standard unit of concentration for the emergency medication "${tallmanName}"?
                 Instructions:
-                1. Respond ONLY with the unit itself (e.g., "mg/ml", "mcg/ml", "IE/ml").
+                1. Respond ONLY with the unit itself${route ? ' and administration route' : ''} (e.g., "mg/ml"${route ? ' i.v.' : ''}, "mcg/ml", "IE/ml").
                 2. DO NOT include any numbers.
                 3. Do not include any text, markdown, or explanation.
                 `;
@@ -406,7 +431,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
                 You are an expert emergency physician/paramedic operating in Austria/Europe.
                 What is the standard unit for an absolute single-dose IV bolus of the emergency medication "${tallmanName}"?
                 Instructions:
-                1. Respond ONLY with the unit itself (e.g., "mg", "mcg", "g", "IE").
+                1. Respond ONLY with the unit itself${route ? ' and administration route' : ''} (e.g., "mg"${route ? ' i.v.' : ''}, "mcg", "g", "IE").
                 2. DO NOT include any numbers.
                 3. Do not include any text, markdown, or explanation.
                 `;
@@ -418,10 +443,13 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
             console.log(` > [Timing] Dosage API: ${(performance.now() - startDosageTiming).toFixed(0)}ms`);
             let text = (res.text || '').trim();
             
-            if (text.length > 15 || text.includes('\n')) {
+            if (text.length > 25 || text.includes('\n')) {
                 return concentration ? "mg/ml" : "mg";
             }
             
+            // Remove space between number and unit for aesthetic grouping (1 mg -> 1mg)
+            text = text.replace(/([\d.])\s+([a-zA-Zμµ])/g, '$1$2').trim();
+
             if (!autoDosage) {
                 text = text.replace(/[0-9.]/g, '').trim();
                 if (!text) return concentration ? "mg/ml" : "mg";
@@ -441,7 +469,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
         console.log(` > Discovered Text: ${resolvedDosage}`);
 
         const classStyle = classesData[assignedClass] || classesData["Other"];
-        const svgContent = generateSVG(tallmanName, classStyle, resolvedDosage, autoDosage, paddingScale);
+        const svgContent = generateSVG(tallmanName, classStyle, resolvedDosage, autoDosage, paddingScale, sizeScale);
         const safeFilename = tallmanName.replace(/[^a-zA-Z0-9]/gi, '_');
         const outputPath = `${outputDir}/${safeFilename}.svg`;
         
@@ -481,7 +509,9 @@ Examples:
         .option('-o, --output <dir>', 'Directory to save the generated SVG files', './labels')
         .option('-a, --auto-dosage', 'Automatically fetch absolute adult IV bolus dosages (e.g., 5 mg) via API', false)
         .option('-C, --concentration', 'If auto-dosage is enabled, fetch concentration (e.g., 10 mg/ml). If disabled, infers concentration unit.', false)
+        .option('-r, --route', 'Include administration route (e.g. i.v., inh.) next to the dosage/concentration', false)
         .option('-s, --scale <number>', 'Scale multiplier for text relative to label size. Larger means smaller padding (default: 1.0)', '1.0')
+        .option('-S, --size-scale <number>', 'Scale multiplier for the entire SVG size linearly (default: 1.0)', '1.0')
         .option('--model <string>', 'Gemini API model to use', 'gemini-3-flash-preview')
         .option('-k, --api-key <string>', 'Gemini API key as plaintext')
         .option('-K, --api-key-file <path>', 'Path to file containing Gemini API key')
@@ -533,7 +563,9 @@ Examples:
             outputDir: options.output,
             autoDosage: options.autoDosage,
             concentration: options.concentration,
+            route: options.route,
             scale: options.scale,
+            sizeScale: options.sizeScale,
             modelName: options.model
         });
     } catch (e: any) {
