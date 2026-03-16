@@ -1,0 +1,12 @@
+# Generated outputs
+/labels/
+mkMediLabels
+
+# Local testing inputs
+input_meds.txt
+
+# Lockfiles (depending on package manager preference for publishing, usually ignored in published package)
+bun.lockb
+pnpm-lock.yaml
+yarn.lock
+env
