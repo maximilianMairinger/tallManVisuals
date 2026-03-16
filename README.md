@@ -65,7 +65,15 @@ bunx tall-man-medis -a -r "Naloxon"
 ```
 <img src="example/withDoage/Naloxon.svg" width="220" />
 
-### 4. Write-In / Blank Labels (Standard layout)
+### 4. Explicit Category Overrides (Brackets)
+Sometimes the AI might categorize a medication differently than you expect, or an institution has non-standard class assignments. You can **force a specific categorization** by appending the classification in parentheses/brackets next to the drug name!
+
+```bash
+bunx tall-man-medis "Ketamine (Analgetikum)" "Adrenalin (Vasopressors)"
+```
+*(This entirely overrides the initial categorization step, meaning zero AI hallucination regarding the ISO standard color group!)*
+
+### 5. Write-In / Blank Labels (Standard layout)
 By default (without the `-a` flag), the tool generates generic labels with a standardized dotted line for manual dosage inputs.
 
 ```bash
