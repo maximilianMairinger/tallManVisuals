@@ -26,7 +26,7 @@ interface MedClass {
     borderColor?: string;
 }
 
-interface InputMed {
+export interface InputMed {
     name: string;
     userClass?: string;
 }
@@ -87,12 +87,7 @@ function parseTallmanCSV(filePath: string): Map<string, string> {
     return map;
 }
 
-function parseInputMeds(filePath: string): InputMed[] {
-    if (!fs.existsSync(filePath)) return[];
-    const content = fs.readFileSync(filePath, 'utf-8');
-    
-    const items = content.split(',').map(m => m.trim()).filter(m => m.length > 0);
-    
+function parseMedsArray(items: string[]): InputMed[] {
     return items.map(item => {
         const match = item.match(/^(.*?)(?:\s*\((.*?)\))?$/);
         if (match) {
@@ -103,6 +98,17 @@ function parseInputMeds(filePath: string): InputMed[] {
         }
         return { name: item };
     });
+}
+
+function parseMedsString(content: string): InputMed[] {
+    const items = content.split(',').map(m => m.trim()).filter(m => m.length > 0);
+    return parseMedsArray(items);
+}
+
+function parseInputMeds(filePath: string): InputMed[] {
+    if (!fs.existsSync(filePath)) return [];
+    const content = fs.readFileSync(filePath, 'utf-8');
+    return parseMedsString(content);
 }
 
 function formatTallmanSVG(medName: string): string {
@@ -221,86 +227,67 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
     </svg>`;
 }
 
-async function main() {
-    // --- CLI Setup using Commander ---
-    const program = new Command();
-    
-    program
-        .name('mkMediLabels')
-        .description('Generates styled SVG syringe labels based on ISO color standards using LLM categorization.')
-        .version('1.0.0')
-        .option('-c, --classes <path>', 'Path to classes.json', 'classes.json')
-        .option('-g, --german <path>', 'Path to tallmanGer.csv', 'tallmanGer.csv')
-        .option('-e, --english <path>', 'Path to tallmanEngl.csv', 'tallmanEngl.csv')
-        .option('-i, --input <path>', 'Path to the input text file (comma separated)', 'input_meds.txt')
-        .option('-o, --output <dir>', 'Directory to save the generated SVG files', './labels')
-        .option('-a, --auto-dosage', 'Automatically fetch absolute adult IV bolus dosages (e.g., 5 mg) via API', false)
-        .option('-C, --concentration', 'If auto-dosage is enabled, fetch concentration (e.g., 10 mg/ml). If disabled, infers concentration unit.', false)
-        .option('-s, --scale <number>', 'Scale multiplier for text relative to label size. Larger means smaller padding (default: 1.0)', '1.0')
-        .option('-k, --api-key <string>', 'Gemini API key as plaintext')
-        .option('-K, --api-key-file <path>', 'Path to file containing Gemini API key');
+export interface GenerateMediLabelsOptions {
+    medications: InputMed[];
+    apiKey: string;
+    classesPath?: string;
+    germanPath?: string;
+    englishPath?: string;
+    outputDir?: string;
+    autoDosage?: boolean;
+    concentration?: boolean;
+    scale?: number | string;
+}
 
-    program.parse(process.argv);
-    const options = program.opts();
-
-    // --- Core Inversion Math ---
+export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     let scaleInputValueStr = options.scale;
-    if (typeof options.scale === 'boolean') scaleInputValueStr = '1.0'; // Default, commander parser quirk
-    const scaleInputValue = parseFloat(scaleInputValueStr);
+    if (typeof options.scale === 'boolean' || options.scale === undefined) scaleInputValueStr = '1.0';
+    const scaleInputValue = typeof scaleInputValueStr === 'number' ? scaleInputValueStr : parseFloat(scaleInputValueStr as string);
     if (isNaN(scaleInputValue) || scaleInputValue <= 0) {
-        console.error("Error: --scale must be a number greater than 0.");
-        process.exit(1);
+        throw new Error("Error: scale must be a number greater than 0.");
     }
-    // Invert the scale so larger S -> smaller padding (approaching 0 at infinity)
     const paddingScale = 1 / scaleInputValue;
 
-    let apiKey = process.env.GEMINI_API_KEY;
-    if (options.apiKey) {
-        apiKey = options.apiKey;
-    } else if (options.apiKeyFile) {
-        if (!fs.existsSync(options.apiKeyFile)) {
-            console.error(`Error: API key file not found at ${options.apiKeyFile}`);
-            process.exit(1);
-        }
-        apiKey = fs.readFileSync(options.apiKeyFile, 'utf-8').trim();
-    }
+    const classesPath = options.classesPath || 'classes.json';
+    const germanPath = options.germanPath || 'tallmanGer.csv';
+    const englishPath = options.englishPath || 'tallmanEngl.csv';
+    const outputDir = options.outputDir || './labels';
+    const autoDosage = options.autoDosage || false;
+    const concentration = options.concentration || false;
 
-    if (!apiKey) {
-        console.error("Error: GEMINI_API_KEY environment variable is missing, and no --api-key or --api-key-file provided.");
-        process.exit(1);
+    if (!options.apiKey) {
+        throw new Error("Error: API key is required.");
     }
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const genAI = new GoogleGenerativeAI(options.apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
 
-    if (!fs.existsSync(options.classes)) {
-        console.error(`Error: Missing classes definition file at ${options.classes}`);
-        process.exit(1);
+    if (!fs.existsSync(classesPath)) {
+        throw new Error(`Error: Missing classes definition file at ${classesPath}`);
     }
-    const classesData: Record<string, MedClass> = JSON.parse(fs.readFileSync(options.classes, 'utf-8'));
+    const classesData: Record<string, MedClass> = JSON.parse(fs.readFileSync(classesPath, 'utf-8'));
     const validTargetKeys = Object.keys(classesData).filter(k => !['adrenaline', 'suxamethonium', 'protamine'].includes(k));
     
     const tallmanMap = new Map<string, string>();
-    const englishMap = parseTallmanCSV(options.english);
+    const englishMap = parseTallmanCSV(englishPath);
     for (const[key, val] of englishMap.entries()) { tallmanMap.set(key, val); }
-    const germanMap = parseTallmanCSV(options.german);
+    const germanMap = parseTallmanCSV(germanPath);
     for (const [key, val] of germanMap.entries()) { tallmanMap.set(key, val); }
 
     console.log(`Loaded ${tallmanMap.size} unique Tall Man lettering entries.`);
-    console.log(`Auto-dosage resolution: ${options.autoDosage ? "ON" : "OFF"}`);
-    console.log(`Resolution Mode: ${options.concentration ? "Concentration (e.g., mg/ml)" : "Absolute Bolus Dose (e.g., mg)"}`);
+    console.log(`Auto-dosage resolution: ${autoDosage ? "ON" : "OFF"}`);
+    console.log(`Resolution Mode: ${concentration ? "Concentration (e.g., mg/ml)" : "Absolute Bolus Dose (e.g., mg)"}`);
     console.log(`Text Scale: ${scaleInputValue} (Padding Multiplier: ${paddingScale.toFixed(2)})`);
 
-    const inputMeds = parseInputMeds(options.input);
-    if (inputMeds.length === 0) {
-        console.log(`No medications found in ${options.input}`);
+    if (options.medications.length === 0) {
+        console.log(`No medications provided.`);
         return;
     }
 
-    if (!fs.existsSync(options.output)) {
-        fs.mkdirSync(options.output, { recursive: true });
+    if (!fs.existsSync(outputDir)) {
+        fs.mkdirSync(outputDir, { recursive: true });
     }
 
-    for (const inputObj of inputMeds) {
+    for (const inputObj of options.medications) {
         const rawName = inputObj.name;
         const searchKey = rawName.toLowerCase();
         const tallmanName = tallmanMap.get(searchKey) || rawName;
@@ -319,48 +306,46 @@ async function main() {
             classPromise = Promise.resolve("adrenaline");
         } else if (!inputObj.userClass && searchKey === "suxamethonium") {
             classPromise = Promise.resolve("suxamethonium");
-        } else if (!inputObj.userClass && searchKey === "protamine") {
+        } else if (!inputObj.userClass && (searchKey === "protamine" || searchKey === "protamin")) {
             classPromise = Promise.resolve("protamine");
         } else {
-            let classPrompt = "";
+            let userClassNote = "";
             if (inputObj.userClass) {
-                classPrompt = `
-                You are a strict data formatting assistant.
-                Provided Semantic Category: "${inputObj.userClass}"
-                Valid Target Keys: ${JSON.stringify(validTargetKeys)}
-
-                Instructions:
-                1. Map the Provided Semantic Category to the closest match from the Valid Target Keys.
-                2. "analgetikum", "analgesic", "painkiller", MUST map to "Opioids".
-                3. Return ONLY the exact string from the Valid Target Keys. No explanations.
-                `;
-            } else {
-                classPrompt = `
-                You are a strict pharmaceutical categorization assistant.
-                Medication Name: "${tallmanName}"
-                Valid Target Keys: ${JSON.stringify(validTargetKeys)}
-
-                Instructions:
-                1. Categorize into the Valid Target Keys based on standard anesthesia/critical care syringe label colors.
-                2. Return ONLY the exact string from the Valid Target Keys.
-                3. If the drug does not fit these categories, output "Other".
-                `;
+                userClassNote = `The user strongly suggests this medication belongs to the category: "${inputObj.userClass}". Consider this hint carefully if it matches one of the expected classifications. `;
             }
 
+            const classPrompt = `
+            You are a medical expert categorizing drugs for ISO standard syringe labels.
+            Classify the medication "${tallmanName}".
+            ${userClassNote}
+            It must be EXACTLY ONE of these categories, nothing else:
+            ${validTargetKeys.join(", ")}
+            
+            Instructions:
+            1. Output ONLY the exact category name from the list above. No quotes, no explanation, no period.
+            2. If you are not absolutely sure, or if it doesn't clearly fit into any specific category, output "Other".
+            `;
+
             classPromise = model.generateContent(classPrompt).then(res => {
-                const text = res.response.text().trim();
-                return validTargetKeys.includes(text) ? text : "Other";
+                let text = res.response.text().trim();
+                let matchingKey = validTargetKeys.find(k => k.toLowerCase() === text.toLowerCase());
+                
+                if (matchingKey) return matchingKey;
+
+                matchingKey = validTargetKeys.find(k => text.toLowerCase().includes(k.toLowerCase()));
+                if (matchingKey) return matchingKey;
+
+                return "Other";
             }).catch(err => {
-                console.error(`❌ API Error categorizing ${tallmanName}:`, err);
+                console.error(`❌ API Error classifying ${tallmanName}:`, err);
                 return "Other";
             });
         }
 
         // 2. Setup Dosage Promise
-        let dosagePrompt = "";
-        
-        if (options.autoDosage) {
-            if (options.concentration) {
+        let dosagePrompt = '';
+        if (autoDosage) {
+            if (concentration) {
                 dosagePrompt = `
                 You are an expert emergency physician/paramedic operating in Austria/Europe.
                 What is the standard pre-filled syringe or standard ampule/drawing concentration for the emergency medication "${tallmanName}"?
@@ -381,7 +366,7 @@ async function main() {
             }
         } else {
             // Auto dosage OFF -> Infer ONLY the Unit (no numbers)
-            if (options.concentration) {
+            if (concentration) {
                 dosagePrompt = `
                 You are an expert emergency physician/paramedic operating in Austria/Europe.
                 What is the standard unit of concentration for the emergency medication "${tallmanName}"?
@@ -406,18 +391,18 @@ async function main() {
             let text = res.response.text().trim();
             
             if (text.length > 15 || text.includes('\n')) {
-                return options.concentration ? "mg/ml" : "mg";
+                return concentration ? "mg/ml" : "mg";
             }
             
-            if (!options.autoDosage) {
+            if (!autoDosage) {
                 text = text.replace(/[0-9.]/g, '').trim();
-                if (!text) return options.concentration ? "mg/ml" : "mg";
+                if (!text) return concentration ? "mg/ml" : "mg";
             }
             
             return text;
         }).catch(err => {
             console.error(`❌ API Error fetching dosage for ${tallmanName}:`, err);
-            return options.concentration ? "mg/ml" : "mg";
+            return concentration ? "mg/ml" : "mg";
         });
 
         // Execute API calls concurrently
@@ -428,9 +413,9 @@ async function main() {
         console.log(` > Discovered Text: ${resolvedDosage}`);
 
         const classStyle = classesData[assignedClass] || classesData["Other"];
-        const svgContent = generateSVG(tallmanName, classStyle, resolvedDosage, options.autoDosage, paddingScale);
+        const svgContent = generateSVG(tallmanName, classStyle, resolvedDosage, autoDosage, paddingScale);
         const safeFilename = tallmanName.replace(/[^a-zA-Z0-9]/gi, '_');
-        const outputPath = `${options.output}/${safeFilename}.svg`;
+        const outputPath = `${outputDir}/${safeFilename}.svg`;
         
         fs.writeFileSync(outputPath, svgContent);
         console.log(` > Saved to ${outputPath}`);
@@ -439,4 +424,80 @@ async function main() {
     console.log("\nDone!");
 }
 
-main();
+async function main() {
+    // --- CLI Setup using Commander ---
+    const program = new Command();
+    
+    program
+        .name('mkMediLabels')
+        .description('Generates styled SVG syringe labels based on ISO color standards using LLM categorization.')
+        .version('1.0.0')
+        .option('-c, --classes <path>', 'Path to classes.json', 'classes.json')
+        .option('-g, --german <path>', 'Path to tallmanGer.csv', 'tallmanGer.csv')
+        .option('-e, --english <path>', 'Path to tallmanEngl.csv', 'tallmanEngl.csv')
+        .option('-f, --medications-file <path>', 'Path to the input text file (comma separated)', 'input_meds.txt')
+        .option('-m, --medications <string>', 'Direct input of medications as a comma-separated string')
+        .option('-o, --output <dir>', 'Directory to save the generated SVG files', './labels')
+        .option('-a, --auto-dosage', 'Automatically fetch absolute adult IV bolus dosages (e.g., 5 mg) via API', false)
+        .option('-C, --concentration', 'If auto-dosage is enabled, fetch concentration (e.g., 10 mg/ml). If disabled, infers concentration unit.', false)
+        .option('-s, --scale <number>', 'Scale multiplier for text relative to label size. Larger means smaller padding (default: 1.0)', '1.0')
+        .option('-k, --api-key <string>', 'Gemini API key as plaintext')
+        .option('-K, --api-key-file <path>', 'Path to file containing Gemini API key')
+        .argument('[meds...]', 'Direct medications as positional arguments');
+
+    program.parse(process.argv);
+    const options = program.opts();
+
+    // --- Core Inversion Math ---
+    
+    let apiKey = process.env.GEMINI_API_KEY;
+    if (options.apiKey) {
+        apiKey = options.apiKey;
+    } else if (options.apiKeyFile) {
+        if (!fs.existsSync(options.apiKeyFile)) {
+            console.error(`Error: API key file not found at ${options.apiKeyFile}`);
+            process.exit(1);
+        }
+        apiKey = fs.readFileSync(options.apiKeyFile, 'utf-8').trim();
+    }
+
+    if (!apiKey) {
+        console.error("Error: GEMINI_API_KEY environment variable is missing, and no --api-key or --api-key-file provided.");
+        process.exit(1);
+    }
+
+    let inputMeds: InputMed[] = [];
+    if (program.args.length > 0) {
+        inputMeds = parseMedsArray(program.args);
+    } else if (options.medications) {
+        inputMeds = parseMedsString(options.medications);
+    } else {
+        inputMeds = parseInputMeds(options.medicationsFile);
+    }
+
+    if (inputMeds.length === 0) {
+        console.log(`No medications found in inputs or ${options.medicationsFile}`);
+        return;
+    }
+
+    try {
+        await generateMediLabels({
+            medications: inputMeds,
+            apiKey: apiKey,
+            classesPath: options.classes,
+            germanPath: options.german,
+            englishPath: options.english,
+            outputDir: options.output,
+            autoDosage: options.autoDosage,
+            concentration: options.concentration,
+            scale: options.scale
+        });
+    } catch (e: any) {
+        console.error(e.message);
+        process.exit(1);
+    }
+}
+
+if (require.main === module || (typeof process !== 'undefined' && process.argv[1] && process.argv[1].endsWith('mkMediLabels.ts'))) {
+    main();
+}
