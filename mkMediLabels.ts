@@ -134,6 +134,55 @@ function parseInputMeds(filePath: string): InputMed[] {
     return parseMedsString(content);
 }
 
+// --- Color Helpers (OKLCH, a perceptual color space, so a shade keeps its hue and looks evenly darker across classes) ---
+
+function srgbToLinear(c: number): number {
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+function linearToSrgb(c: number): number {
+    return c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055;
+}
+
+function hexToOklch(hex: string): { L: number; C: number; h: number } {
+    const [r, g, b] = [1, 3, 5].map(i => srgbToLinear(parseInt(hex.slice(i, i + 2), 16) / 255));
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    const L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+    const a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+    const bb = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+    return { L, C: Math.hypot(a, bb), h: Math.atan2(bb, a) };
+}
+
+// Returns linear sRGB channels, which may fall outside [0, 1] when the color is out of gamut
+function oklchToLinearRgb(L: number, C: number, h: number): number[] {
+    const a = C * Math.cos(h);
+    const b = C * Math.sin(h);
+    const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+    const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+    const s = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3;
+    return [
+        4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+        -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+        -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+    ];
+}
+
+// Darker shade of a color: scales OKLCH lightness and chroma by the same factor and keeps the hue.
+// 0.72 reproduces a hand-picked border for Process yellow C (#FFE900 -> #A49615, hand-picked was #A59815).
+function shadeColor(hex: string, factor = 0.72): string {
+    const { L, C, h } = hexToOklch(hex);
+    let chroma = C * factor;
+    let rgb = oklchToLinearRgb(L * factor, chroma, h);
+    // Pull chroma in until the shade fits into sRGB
+    while (rgb.some(c => c < 0 || c > 1) && chroma > 0) {
+        chroma = Math.max(0, chroma - 0.005);
+        rgb = oklchToLinearRgb(L * factor, chroma, h);
+    }
+    return '#' + rgb.map(c => Math.round(Math.min(1, Math.max(0, linearToSrgb(c))) * 255).toString(16).padStart(2, '0').toUpperCase()).join('');
+}
+
 function formatTallmanSVG(medName: string): string {
     // Only runs of 2+ capitals are Tall Man segments; a single capital is just normal capitalization (e.g. the "A" in "AmLODIPin").
     const parts = medName.split(/([A-ZÄÖÜ]{2,})/);
@@ -153,7 +202,7 @@ function formatTallmanSVG(medName: string): string {
     return figmaBugFixPrefix + formed;
 }
 
-function generateSVG(medName: string, medClass: MedClass, dosageText: string, isAutoDosage: boolean, paddingScale: number, sizeScale: number): string {
+function generateSVG(medName: string, medClass: MedClass, dosageText: string, isAutoDosage: boolean, paddingScale: number, sizeScale: number, tonalBorder: boolean): string {
     const bgHex = PANTONE_TO_HEX[medClass.backgroundColor] || '#FFFFFF';
     const textHex = PANTONE_TO_HEX[medClass.textColor] || '#000000';
     const unitTextHex = PANTONE_TO_HEX[medClass.unitTextColor] || '#000000';
@@ -210,8 +259,11 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
             <path d="${splitPath}" fill="${bgHex}" />
         `;
     }
-    else if (medClass.hasBorder && medClass.borderColor) {
-        const borderHex = PANTONE_TO_HEX[medClass.borderColor] || '#000000';
+    else if ((medClass.hasBorder && medClass.borderColor) || tonalBorder) {
+        // Classes with their own border keep it; with tonalBorder (not part of ISO 26825), solid labels get a darker shade of their background
+        const borderHex = medClass.hasBorder && medClass.borderColor
+            ? PANTONE_TO_HEX[medClass.borderColor] || '#000000'
+            : shadeColor(bgHex);
         const borderInset = 4 * paddingScale * sizeScale;
         const borderStroke = 8 * paddingScale * sizeScale;
         backgroundSvg = `
@@ -286,6 +338,7 @@ export interface GenerateMediLabelsOptions {
     scale?: number | string;
     sizeScale?: number | string;
     modelName?: string;
+    tonalBorder?: boolean;
 }
 
 export async function generateMediLabels(options: GenerateMediLabelsOptions) {
@@ -313,6 +366,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     const autoDosage = options.autoDosage || false;
     const concentration = options.concentration || false;
     const route = options.route || false;
+    const tonalBorder = options.tonalBorder || false;
     const modelName = options.modelName || 'gemini-3.1-flash-lite-preview';
 
 
@@ -357,6 +411,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     console.log(`Resolution Mode: ${concentration ? "Concentration (e.g., mg/ml)" : "Absolute Bolus Dose (e.g., mg)"}`);
     console.log(`Text Scale: ${scaleInputValue} (Padding Multiplier: ${paddingScale.toFixed(2)})`);
     console.log(`Size Scale: ${sizeScale}`);
+    console.log(`Tonal border: ${tonalBorder ? "ON (not part of ISO 26825)" : "OFF"}`);
 
     if (options.medications.length === 0) {
         console.log(`No medications provided.`);
@@ -512,7 +567,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
         console.log(` > Discovered Text: ${resolvedDosage}`);
 
         const classStyle = classesData[assignedClass] || classesData["Other"];
-        const svgContent = generateSVG(tallmanName, classStyle, resolvedDosage, autoDosage, paddingScale, sizeScale);
+        const svgContent = generateSVG(tallmanName, classStyle, resolvedDosage, autoDosage, paddingScale, sizeScale, tonalBorder);
         const safeFilename = tallmanName.replace(/[^a-zA-Z0-9]/gi, '_');
         const outputPath = `${outputDir}/${safeFilename}.svg`;
         
@@ -559,6 +614,7 @@ Examples:
         .option('-r, --route', 'Include administration route (e.g. i.v., inh.) next to the dosage/concentration', false)
         .option('-s, --scale <number>', 'Scale multiplier for text relative to label size. Larger means smaller padding (default: 1.0)', '1.0')
         .option('-S, --size-scale <number>', 'Scale multiplier for the entire SVG size linearly (default: 1.0)', '1.0')
+        .option('-b, --tonal-border', 'Give solid-color labels a border in a darker shade of their background (not part of ISO 26825)', false)
         .option('--model <string>', 'Gemini API model to use', 'gemini-3-flash-preview')
         .option('-k, --api-key <string>', 'Gemini API key as plaintext')
         .option('-K, --api-key-file <path>', 'Path to file containing Gemini API key')
@@ -618,7 +674,8 @@ Examples:
             route: options.route,
             scale: options.scale,
             sizeScale: options.sizeScale,
-            modelName: options.model
+            modelName: options.model,
+            tonalBorder: options.tonalBorder
         });
     } catch (e: any) {
         console.error(e.message);

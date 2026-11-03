@@ -134,6 +134,7 @@ bunx tall-man-medis -f input_meds.txt
 | `-r, --route` | Include administration route (e.g. `i.v.`, `inh.`) next to the dosage/concentration | `false` |
 | `-s, --scale <number>` | Scale multiplier for text padding. `1.0` is default size | `1.0` |
 | `-S, --size-scale <number>` | Scale multiplier for the entire SVG size linearly | `1.0` |
+| `-b, --tonal-border` | Give solid-color labels a border in a darker shade of their background (computed in OKLCH). Not part of ISO 26825 | `false` |
 | `-k, --api-key <string>` | Pass the Gemini API key as plaintext | |
 | `-K, --api-key-file <path>`| Path to file containing the Gemini API key | |
 
@@ -163,6 +164,7 @@ await generateMediLabels({
     concentration: true, // Use concentration format "10 mg/ml" 
     route: true,         // Append the route of administration, e.g. "i.v."
     scale: 1.0,          // Padding scale
-    sizeScale: 0.9       // Scaled down linear SVG size
+    sizeScale: 0.9,      // Scaled down linear SVG size
+    tonalBorder: true    // Darker border on solid-color labels (not part of ISO 26825)
 });
 ```
