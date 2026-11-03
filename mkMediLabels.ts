@@ -184,15 +184,17 @@ function shadeColor(hex: string, factor = 0.72): string {
 }
 
 function formatTallmanSVG(medName: string): string {
-    // Only runs of 2+ capitals are Tall Man segments; a single capital is just normal capitalization (e.g. the "A" in "AmLODIPin").
-    const parts = medName.split(/([A-ZÄÖÜ]{2,})/);
+    // Tall Man segments are runs of capitals. At the start of a word a single capital is just normal capitalization
+    // (the "A" in "AmLODIPin"), so there it takes 2+; inside a word even a single capital counts (e.g. "abCdef").
+    // The split keeps the matched segments at the odd indices.
+    const parts = medName.split(/((?<!\p{L})[A-ZÄÖÜ]{2,}|(?<=\p{L})[A-ZÄÖÜ]+)/u);
     // Figma BUG workaround: If the text starts directly with a bold tspan, Figma forces the whole block to be bold.
     // Injecting an invisible normal zero-width-space tspan perfectly roots Figma's initial text node state.
     const figmaBugFixPrefix = `<tspan font-weight="normal">&#8203;</tspan>`;
     
-    const formed = parts.map(part => {
+    const formed = parts.map((part, i) => {
         if (!part) return '';
-        if (/^[A-ZÄÖÜ]{2,}$/.test(part)) {
+        if (i % 2 === 1) {
             return `<tspan font-weight="bold">${part}</tspan>`;
         } else {
             return `<tspan font-weight="normal">${part}</tspan>`;
