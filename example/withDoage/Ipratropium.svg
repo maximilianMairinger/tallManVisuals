@@ -3,7 +3,7 @@
             <rect width="100%" height="100%" fill="#A4D65E" rx="6" />
         
         
-        <text x="50%" y="39" text-anchor="middle" font-family="Averta CY" font-size="28.8" fill="#000000"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="bold">I</tspan><tspan font-weight="normal">pratropium</tspan></text>
+        <text x="50%" y="39" text-anchor="middle" font-family="Averta CY" font-size="28.8" fill="#000000"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="normal">Ipratropium</tspan></text>
         <text x="50%" y="68.7" text-anchor="middle" font-family="Averta CY" font-size="19.8" fill="#000000"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="bold">0.5mg</tspan><tspan font-weight="normal">&#160;inh.</tspan></text>
     
     </svg>
