@@ -5,3 +5,6 @@ bun.lockb
 .pnpm-lock.yaml
 node_modules
 env
+
+mkMediLabels
+sample

@@ -10,3 +10,6 @@ bun.lockb
 pnpm-lock.yaml
 yarn.lock
 env
+
+example
+sample
