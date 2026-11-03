@@ -4,6 +4,7 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import { Command } from 'commander';
+import { AVERTA_CY_WIDTHS, AVERTA_CY_FALLBACK_WIDTH } from './fontMetrics.ts';
 
 const PANTONE_TO_HEX: Record<string, string> = {
     "Salmon 156": "#F29D70",
@@ -183,26 +184,57 @@ function shadeColor(hex: string, factor = 0.72): string {
     return '#' + rgb.map(c => Math.round(Math.min(1, Math.max(0, linearToSrgb(c))) * 255).toString(16).padStart(2, '0').toUpperCase()).join('');
 }
 
-function formatTallmanSVG(medName: string): string {
+interface TextSegment {
+    text: string;
+    bold: boolean;
+}
+
+function tallmanSegments(medName: string): TextSegment[] {
     // Tall Man segments are runs of capitals. At the start of a word a single capital is just normal capitalization
     // (the "A" in "AmLODIPin"), so there it takes 2+; inside a word even a single capital counts (e.g. "abCdef").
     // The split keeps the matched segments at the odd indices.
     const parts = medName.split(/((?<!\p{L})[A-ZÄÖÜ]{2,}|(?<=\p{L})[A-ZÄÖÜ]+)/u);
+    return parts.map((text, i) => ({ text, bold: i % 2 === 1 })).filter(s => s.text);
+}
+
+function formatTallmanSVG(medName: string): string {
     // Figma BUG workaround: If the text starts directly with a bold tspan, Figma forces the whole block to be bold.
     // Injecting an invisible normal zero-width-space tspan perfectly roots Figma's initial text node state.
     const figmaBugFixPrefix = `<tspan font-weight="normal">&#8203;</tspan>`;
-    
-    const formed = parts.map((part, i) => {
-        if (!part) return '';
-        if (i % 2 === 1) {
-            return `<tspan font-weight="bold">${part}</tspan>`;
-        } else {
-            return `<tspan font-weight="normal">${part}</tspan>`;
-        }
-    }).join('');
-    
+
+    const formed = tallmanSegments(medName)
+        .map(s => `<tspan font-weight="${s.bold ? 'bold' : 'normal'}">${s.text}</tspan>`)
+        .join('');
+
     return figmaBugFixPrefix + formed;
 }
+
+// Rendered width in px of the segments in Averta CY at the given font size (kerning ignored)
+function measureText(segments: TextSegment[], fontSize: number): number {
+    let em = 0;
+    for (const { text, bold } of segments) {
+        const widths = AVERTA_CY_WIDTHS[bold ? 'bold' : 'regular'];
+        for (const char of text) em += widths[char] ?? AVERTA_CY_FALLBACK_WIDTH;
+    }
+    return em * fontSize;
+}
+
+// Ways to break a name into two lines: at a space (dropped) or after a hyphen (kept on the first line)
+function twoLineSplits(name: string): [string, string][] {
+    const splits: [string, string][] = [];
+    for (let i = 1; i < name.length - 1; i++) {
+        if (name[i] === ' ') splits.push([name.slice(0, i).trim(), name.slice(i + 1).trim()]);
+        else if (name[i] === '-') splits.push([name.slice(0, i + 1).trim(), name.slice(i + 1).trim()]);
+    }
+    return splits.filter(([first, second]) => first && second);
+}
+
+// Below this font scale a name that can be broken onto two lines is wrapped instead of shrunk further
+const WRAP_BELOW_SCALE = 0.65;
+// Font metrics as a fraction of the font size, matching the 24/8 ascent/descent used for the 32px name
+const NAME_ASCENT = 0.75;
+const NAME_DESCENT = 0.25;
+const NAME_LINE_GAP = 1.05; // baseline to baseline for two-line names
 
 function generateSVG(medName: string, medClass: MedClass, dosageText: string, isAutoDosage: boolean, paddingScale: number, sizeScale: number, tonalBorder: boolean): string {
     const bgHex = PANTONE_TO_HEX[medClass.backgroundColor] || '#FFFFFF';
@@ -236,10 +268,12 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
     const splitLineY = topEmpty + text1H + (9 * paddingScale * sizeScale);
 
     let backgroundSvg = '';
+    let frameInset = 0; // How far stripes or a border reach into the label; text must stay inside it
 
     if (medClass.isStriped && medClass.secondaryBackgroundColor) {
         const stripeHex = PANTONE_TO_HEX[medClass.secondaryBackgroundColor] || '#000000';
         const inset = 15 * paddingScale * sizeScale;
+        frameInset = inset;
         backgroundSvg = `
             <defs>
                 <pattern id="stripes" width="${20 * sizeScale}" height="${20 * sizeScale}" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
@@ -268,6 +302,7 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
             : shadeColor(bgHex);
         const borderInset = 4 * paddingScale * sizeScale;
         const borderStroke = 8 * paddingScale * sizeScale;
+        frameInset = borderInset + borderStroke / 2;
         backgroundSvg = `
             <rect x="${borderInset}" y="${borderInset}" width="${newWidth - 2*borderInset}" height="${newHeight - 2*borderInset}" fill="${bgHex}" stroke="${borderHex}" stroke-width="${borderStroke}" rx="${rx}" />
         `;
@@ -278,45 +313,91 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
         `;
     }
 
-    const formattedMedName = formatTallmanSVG(medName);
+    // --- Text Fitting (widths measured with the Averta CY metrics) ---
+    const textMaxWidth = newWidth - 2 * (frameInset + 10 * paddingScale * sizeScale);
+
+    // Name: shrink to fit on one line; if that gets too small and the name has a space or hyphen, wrap it onto two lines
+    const nameFontSize = 32 * sizeScale;
+    const oneLineScale = Math.min(1, textMaxWidth / measureText(tallmanSegments(medName), nameFontSize));
+
+    // Two lines must stay between the frame and the dosage text (or the split line on split labels)
+    const nameTopLimit = frameInset + 4 * sizeScale;
+    const nameBottomLimit = (medClass.isSplit ? splitLineY : bottomY - text2Ascent) - 4 * sizeScale;
+    const nameAreaH = nameBottomLimit - nameTopLimit;
+    const twoLineHeightEm = NAME_ASCENT + NAME_LINE_GAP + NAME_DESCENT;
+
+    let twoLines: { lines: [string, string]; scale: number } | undefined;
+    if (oneLineScale < WRAP_BELOW_SCALE) {
+        for (const lines of twoLineSplits(medName)) {
+            const widest = Math.max(...lines.map(line => measureText(tallmanSegments(line), nameFontSize)));
+            const scale = Math.min(1, textMaxWidth / widest, nameAreaH / (twoLineHeightEm * nameFontSize));
+            if (!twoLines || scale > twoLines.scale) twoLines = { lines, scale };
+        }
+    }
+
+    const nameText = (text: string, y: number, fontSize: number) =>
+        `<text x="50%" y="${y}" text-anchor="middle" font-family="Averta CY" font-size="${fontSize}" fill="${textHex}">${formatTallmanSVG(text)}</text>`;
+
+    let nameSvg: string;
+    if (twoLines && twoLines.scale > oneLineScale) {
+        const fontSize = nameFontSize * twoLines.scale;
+        const blockTop = nameTopLimit + (nameAreaH - twoLineHeightEm * fontSize) / 2;
+        const firstBaseline = blockTop + NAME_ASCENT * fontSize;
+        nameSvg = nameText(twoLines.lines[0], firstBaseline, fontSize) + '\n        '
+            + nameText(twoLines.lines[1], firstBaseline + NAME_LINE_GAP * fontSize, fontSize);
+    } else {
+        // Shift the baseline up as the font shrinks so the name stays vertically centered where it was
+        const fontSize = nameFontSize * oneLineScale;
+        const baseline = topTextY - (NAME_ASCENT - NAME_DESCENT) / 2 * (nameFontSize - fontSize);
+        nameSvg = nameText(medName, baseline, fontSize);
+    }
+
+    // Dosage: bold amount + normal rest, shrunk the same way if it is too wide (next to the write-in line when there is one)
+    const dosageParts = dosageText.split(' ');
+    const dosageSegments: TextSegment[] = dosageParts.length > 1
+        ? [{ text: dosageParts[0], bold: true }, { text: ' ' + dosageParts.slice(1).join(' '), bold: false }]
+        : [{ text: dosageText, bold: true }];
+    const lineLen = 90 * paddingScale * sizeScale;
+    const gap = 8 * paddingScale * sizeScale;
+    const dosageMaxWidth = isAutoDosage ? textMaxWidth : textMaxWidth - lineLen - gap;
+    const dosageFontSize = 22 * sizeScale * Math.min(1, dosageMaxWidth / measureText(dosageSegments, 22 * sizeScale));
+    const dosageWidth = measureText(dosageSegments, dosageFontSize);
+
     let bottomTextSvg = '';
 
     if (isAutoDosage) {
         // Auto-Dosage ON -> Centered text only, NO line
-        const parts = dosageText.split(' ');
+        const parts = dosageParts;
         if (parts.length > 1) {
-            bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY" font-size="${22 * sizeScale}" fill="${unitTextHex}"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="bold">${parts[0]}</tspan><tspan font-weight="normal">&#160;${parts.slice(1).join(' ')}</tspan></text>`;
+            bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY" font-size="${dosageFontSize}" fill="${unitTextHex}"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="bold">${parts[0]}</tspan><tspan font-weight="normal">&#160;${parts.slice(1).join(' ')}</tspan></text>`;
         } else {
-            bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY" font-weight="bold" font-size="${22 * sizeScale}" fill="${unitTextHex}">${dosageText}</text>`;
+            bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY" font-weight="bold" font-size="${dosageFontSize}" fill="${unitTextHex}">${dosageText}</text>`;
         }
     } else {
         // Auto-Dosage OFF -> Centered Group (Line + Unit text), bottom-aligned
-        const lineLen = 90 * paddingScale * sizeScale;
-        const gap = 8 * paddingScale * sizeScale;
-        const approxTextWidth = dosageText.length * 12.5 * sizeScale; 
-        const totalWidth = lineLen + gap + approxTextWidth;
+        const totalWidth = lineLen + gap + dosageWidth;
         
         const startX = (newWidth / 2) - (totalWidth / 2);
         const lineX1 = startX;
         const lineX2 = startX + lineLen;
         const textX = lineX2 + gap;
 
-        const parts = dosageText.split(' ');
+        const parts = dosageParts;
         if (parts.length > 1) {
             bottomTextSvg = `
                 <line x1="${lineX1}" y1="${bottomY}" x2="${lineX2}" y2="${bottomY}" stroke="${unitTextHex}" stroke-width="${2.5 * sizeScale}" stroke-dasharray="${4 * sizeScale},${8 * sizeScale}" stroke-linecap="round" />
-                <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY" font-size="${22 * sizeScale}" fill="${unitTextHex}"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="bold">${parts[0]}</tspan><tspan font-weight="normal">&#160;${parts.slice(1).join(' ')}</tspan></text>
+                <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY" font-size="${dosageFontSize}" fill="${unitTextHex}"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="bold">${parts[0]}</tspan><tspan font-weight="normal">&#160;${parts.slice(1).join(' ')}</tspan></text>
             `;
         } else {
             bottomTextSvg = `
                 <line x1="${lineX1}" y1="${bottomY}" x2="${lineX2}" y2="${bottomY}" stroke="${unitTextHex}" stroke-width="${2.5 * sizeScale}" stroke-dasharray="${4 * sizeScale},${8 * sizeScale}" stroke-linecap="round" />
-                <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY" font-weight="bold" font-size="${22 * sizeScale}" fill="${unitTextHex}">${dosageText}</text>
+                <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY" font-weight="bold" font-size="${dosageFontSize}" fill="${unitTextHex}">${dosageText}</text>
             `;
         }
     }
 
     const textSvg = `
-        <text x="50%" y="${topTextY}" text-anchor="middle" font-family="Averta CY" font-size="${32 * sizeScale}" fill="${textHex}">${formattedMedName}</text>
+        ${nameSvg}
         ${bottomTextSvg}
     `;
 
