@@ -135,6 +135,7 @@ bunx tall-man-medis -f input_meds.txt
 | `-s, --scale <number>` | Scale multiplier for text padding. `1.0` is default size | `1.0` |
 | `-S, --size-scale <number>` | Scale multiplier for the entire SVG size linearly | `1.0` |
 | `-b, --tonal-border` | Give solid-color labels a border in a darker shade of their background (computed in OKLCH). Not part of ISO 26825 | `false` |
+| `--model <string>` | Gemini model to use | `gemini-3.8-flash` |
 | `-k, --api-key <string>` | Pass the Gemini API key as plaintext | |
 | `-K, --api-key-file <path>`| Path to file containing the Gemini API key | |
 

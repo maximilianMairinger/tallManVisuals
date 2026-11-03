@@ -369,7 +369,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     const concentration = options.concentration || false;
     const route = options.route || false;
     const tonalBorder = options.tonalBorder || false;
-    const modelName = options.modelName || 'gemini-3.1-flash-lite-preview';
+    const modelName = options.modelName || 'gemini-3.8-flash';
 
 
     const prompt = (promptStr: string) => {
@@ -617,7 +617,7 @@ Examples:
         .option('-s, --scale <number>', 'Scale multiplier for text relative to label size. Larger means smaller padding (default: 1.0)', '1.0')
         .option('-S, --size-scale <number>', 'Scale multiplier for the entire SVG size linearly (default: 1.0)', '1.0')
         .option('-b, --tonal-border', 'Give solid-color labels a border in a darker shade of their background (not part of ISO 26825)', false)
-        .option('--model <string>', 'Gemini API model to use', 'gemini-3-flash-preview')
+        .option('--model <string>', 'Gemini API model to use', 'gemini-3.8-flash')
         .option('-k, --api-key <string>', 'Gemini API key as plaintext')
         .option('-K, --api-key-file <path>', 'Path to file containing Gemini API key')
         .argument('[meds...]', 'Direct medications as positional arguments');
