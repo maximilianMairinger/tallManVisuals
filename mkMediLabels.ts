@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
 import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 import { Command } from 'commander';
 
@@ -15,6 +17,19 @@ const PANTONE_TO_HEX: Record<string, string> = {
     "White": "#FFFFFF",
     "Black": "#000000"
 };
+
+// Medications with their own dedicated label class, keyed by every accepted (lowercase) name, German and English.
+const SPECIAL_CLASS_NAMES = new Map<string, string>([
+    ["adrenaline", "adrenaline"],
+    ["adrenalin", "adrenaline"],
+    ["epinephrine", "adrenaline"],
+    ["epinephrin", "adrenaline"],
+    ["suxamethonium", "suxamethonium"],
+    ["succinylcholine", "suxamethonium"],
+    ["succinylcholin", "suxamethonium"],
+    ["protamine", "protamine"],
+    ["protamin", "protamine"]
+]);
 
 interface MedClass {
     backgroundColor: string;
@@ -33,6 +48,13 @@ export interface InputMed {
 }
 
 // --- Helper Functions ---
+
+// The bundled data files ship next to this script, so resolve them from here instead of the CWD (bunx runs from anywhere).
+// Compiled binaries have no real script dir, so they fall back to the CWD.
+function defaultDataPath(fileName: string): string {
+    const bundledPath = path.join(path.dirname(fileURLToPath(import.meta.url)), fileName);
+    return fs.existsSync(bundledPath) ? bundledPath : fileName;
+}
 
 function parseTallmanCSV(filePath: string): Map<string, string> {
     const map = new Map<string, string>();
@@ -113,14 +135,15 @@ function parseInputMeds(filePath: string): InputMed[] {
 }
 
 function formatTallmanSVG(medName: string): string {
-    const parts = medName.split(/([A-ZÄÖÜ]+)/);
+    // Only runs of 2+ capitals are Tall Man segments; a single capital is just normal capitalization (e.g. the "A" in "AmLODIPin").
+    const parts = medName.split(/([A-ZÄÖÜ]{2,})/);
     // Figma BUG workaround: If the text starts directly with a bold tspan, Figma forces the whole block to be bold.
     // Injecting an invisible normal zero-width-space tspan perfectly roots Figma's initial text node state.
     const figmaBugFixPrefix = `<tspan font-weight="normal">&#8203;</tspan>`;
     
     const formed = parts.map(part => {
         if (!part) return '';
-        if (/^[A-ZÄÖÜ]+$/.test(part)) {
+        if (/^[A-ZÄÖÜ]{2,}$/.test(part)) {
             return `<tspan font-weight="bold">${part}</tspan>`;
         } else {
             return `<tspan font-weight="normal">${part}</tspan>`;
@@ -208,9 +231,9 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
         // Auto-Dosage ON -> Centered text only, NO line
         const parts = dosageText.split(' ');
         if (parts.length > 1) {
-            bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY" font-size="${22 * sizeScale}" fill="${textHex}"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="bold">${parts[0]}</tspan><tspan font-weight="normal">&#160;${parts.slice(1).join(' ')}</tspan></text>`;
+            bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY" font-size="${22 * sizeScale}" fill="${unitTextHex}"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="bold">${parts[0]}</tspan><tspan font-weight="normal">&#160;${parts.slice(1).join(' ')}</tspan></text>`;
         } else {
-            bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY" font-weight="bold" font-size="${22 * sizeScale}" fill="${textHex}">${dosageText}</text>`;
+            bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY" font-weight="bold" font-size="${22 * sizeScale}" fill="${unitTextHex}">${dosageText}</text>`;
         }
     } else {
         // Auto-Dosage OFF -> Centered Group (Line + Unit text), bottom-aligned
@@ -227,13 +250,13 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
         const parts = dosageText.split(' ');
         if (parts.length > 1) {
             bottomTextSvg = `
-                <line x1="${lineX1}" y1="${bottomY}" x2="${lineX2}" y2="${bottomY}" stroke="${textHex}" stroke-width="${2.5 * sizeScale}" stroke-dasharray="${4 * sizeScale},${8 * sizeScale}" stroke-linecap="round" />
-                <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY" font-size="${22 * sizeScale}" fill="${textHex}"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="bold">${parts[0]}</tspan><tspan font-weight="normal">&#160;${parts.slice(1).join(' ')}</tspan></text>
+                <line x1="${lineX1}" y1="${bottomY}" x2="${lineX2}" y2="${bottomY}" stroke="${unitTextHex}" stroke-width="${2.5 * sizeScale}" stroke-dasharray="${4 * sizeScale},${8 * sizeScale}" stroke-linecap="round" />
+                <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY" font-size="${22 * sizeScale}" fill="${unitTextHex}"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="bold">${parts[0]}</tspan><tspan font-weight="normal">&#160;${parts.slice(1).join(' ')}</tspan></text>
             `;
         } else {
             bottomTextSvg = `
-                <line x1="${lineX1}" y1="${bottomY}" x2="${lineX2}" y2="${bottomY}" stroke="${textHex}" stroke-width="${2.5 * sizeScale}" stroke-dasharray="${4 * sizeScale},${8 * sizeScale}" stroke-linecap="round" />
-                <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY" font-weight="bold" font-size="${22 * sizeScale}" fill="${textHex}">${dosageText}</text>
+                <line x1="${lineX1}" y1="${bottomY}" x2="${lineX2}" y2="${bottomY}" stroke="${unitTextHex}" stroke-width="${2.5 * sizeScale}" stroke-dasharray="${4 * sizeScale},${8 * sizeScale}" stroke-linecap="round" />
+                <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY" font-weight="bold" font-size="${22 * sizeScale}" fill="${unitTextHex}">${dosageText}</text>
             `;
         }
     }
@@ -282,9 +305,9 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     }
     const sizeScale = parsedSizeScale * 0.9;
 
-    const classesPath = options.classesPath || 'classes.json';
-    const germanPath = options.germanPath || 'tallmanGer.csv';
-    const englishPath = options.englishPath || 'tallmanEngl.csv';
+    const classesPath = options.classesPath || defaultDataPath('classes.json');
+    const germanPath = options.germanPath || defaultDataPath('tallmanGer.csv');
+    const englishPath = options.englishPath || defaultDataPath('tallmanEngl.csv');
     const languagePriority = options.languagePriority || 'german';
     const outputDir = options.outputDir || './labels';
     const autoDosage = options.autoDosage || false;
@@ -314,7 +337,8 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
         throw new Error(`Error: Missing classes definition file at ${classesPath}`);
     }
     const classesData: Record<string, MedClass> = JSON.parse(fs.readFileSync(classesPath, 'utf-8'));
-    const validTargetKeys = Object.keys(classesData).filter(k => !['adrenaline', 'suxamethonium', 'protamine'].includes(k));
+    const specialClasses = new Set(SPECIAL_CLASS_NAMES.values());
+    const validTargetKeys = Object.keys(classesData).filter(k => !specialClasses.has(k));
     
     const tallmanMap = new Map<string, string>();
     const englishMap = parseTallmanCSV(englishPath);
@@ -343,30 +367,34 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
         fs.mkdirSync(outputDir, { recursive: true });
     }
 
+    const failedMeds: string[] = [];
     const promises = options.medications.map(async (inputObj) => {
         const rawName = inputObj.name;
         const searchKey = rawName.toLowerCase();
         const tallmanName = tallmanMap.get(searchKey) || rawName;
         
         console.log(`\nProcessing: ${tallmanName} (Original input: ${rawName})`);
-        if (inputObj.userClass) {
-            console.log(` > User suggested class: ${inputObj.userClass}`);
-        }
 
         let assignedClass = "";
         let classPromise: Promise<string>;
         let dosagePromise: Promise<string>;
-        
+
         // 1. Setup Class Promise
-        if (!inputObj.userClass && (searchKey === "adrenaline" || searchKey === "epinephrine")) {
-            classPromise = Promise.resolve("adrenaline");
-        } else if (!inputObj.userClass && searchKey === "suxamethonium") {
-            classPromise = Promise.resolve("suxamethonium");
-        } else if (!inputObj.userClass && (searchKey === "protamine" || searchKey === "protamin")) {
-            classPromise = Promise.resolve("protamine");
+        // A user class that names a class in classes.json is forced as-is; anything else is only a hint for the LLM.
+        const forcedClass = inputObj.userClass
+            ? Object.keys(classesData).find(k => k.toLowerCase() === inputObj.userClass!.toLowerCase())
+            : undefined;
+        const specialClass = SPECIAL_CLASS_NAMES.get(searchKey);
+
+        if (forcedClass) {
+            console.log(` > User forced class: ${forcedClass}`);
+            classPromise = Promise.resolve(forcedClass);
+        } else if (!inputObj.userClass && specialClass) {
+            classPromise = Promise.resolve(specialClass);
         } else {
             let userClassNote = "";
             if (inputObj.userClass) {
+                console.log(` > User suggested class (not in ${classesPath}, passed to the AI as a hint): ${inputObj.userClass}`);
                 userClassNote = `The user strongly suggests this medication belongs to the category: "${inputObj.userClass}". Consider this hint carefully if it matches one of the expected classifications. `;
             }
 
@@ -396,7 +424,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
                 return "Other";
             }).catch(err => {
                 console.error(`❌ API Error classifying ${tallmanName}:`, err);
-                return "Other";
+                throw err;
             });
         }
 
@@ -458,19 +486,27 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
             text = text.replace(/([\d.])\s+([a-zA-Zμµ])/g, '$1$2').trim();
 
             if (!autoDosage) {
-                text = text.replace(/[0-9.]/g, '').trim();
+                // Strip whole numbers (5, 0.5, 1.000) but keep the dots in routes like "i.v."
+                text = text.replace(/\d*[.,]?\d+/g, '').trim();
                 if (!text) return concentration ? "mg/ml" : "mg";
             }
             
             return text;
         }).catch(err => {
             console.error(`❌ API Error fetching dosage for ${tallmanName}:`, err);
-            return concentration ? "mg/ml" : "mg";
+            throw err;
         });
 
-        // Execute API calls concurrently
-        const[resolvedClass, resolvedDosage] = await Promise.all([classPromise, dosagePromise]);
-        
+        // Execute API calls concurrently. If either fails, write no label rather than one with a guessed class or unit.
+        let resolvedClass: string, resolvedDosage: string;
+        try {
+            [resolvedClass, resolvedDosage] = await Promise.all([classPromise, dosagePromise]);
+        } catch {
+            console.error(` > Skipped ${tallmanName}: no label written because the API request failed.`);
+            failedMeds.push(tallmanName);
+            return;
+        }
+
         assignedClass = resolvedClass;
         console.log(` > Assigned Class: ${assignedClass}`);
         console.log(` > Discovered Text: ${resolvedDosage}`);
@@ -485,6 +521,10 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     });
 
     await Promise.all(promises);
+
+    if (failedMeds.length > 0) {
+        throw new Error(`❌ No label was written for ${failedMeds.length} medication(s) because the Gemini API request failed (check your API key and rate limits): ${failedMeds.join(', ')}`);
+    }
 
     console.log("\nDone!");
 }
@@ -505,11 +545,11 @@ predict standard absolute dosages or concentrations.
 Examples:
   bun run mkMediLabels.ts -f input_meds.txt
   bun run mkMediLabels.ts -m "Amiodaron, Fentanyl"
-  bun run mkMediLabels.ts Adrenalin Suxamethonium "Propofol (Hypnotics)"`)
+  bun run mkMediLabels.ts Adrenalin Suxamethonium "Propofol (Induction drugs)"`)
         .version('1.0.0')
-        .option('-c, --classes <path>', 'Path to classes.json', 'classes.json')
-        .option('-g, --german <path>', 'Path to tallmanGer.csv', 'tallmanGer.csv')
-        .option('-e, --english <path>', 'Path to tallmanEngl.csv', 'tallmanEngl.csv')
+        .option('-c, --classes <path>', 'Path to classes.json (default: the bundled classes.json)')
+        .option('-g, --german <path>', 'Path to tallmanGer.csv (default: the bundled tallmanGer.csv)')
+        .option('-e, --english <path>', 'Path to tallmanEngl.csv (default: the bundled tallmanEngl.csv)')
         .option('-l, --language-priority <german|english>', 'Which language takes precedence for Tall Man lettering matching', 'german')        
         .option('-f, --medications-file <path>', 'Path to the input text file (comma separated)', 'input_meds.txt')
         .option('-m, --medications <string>', 'Direct input of medications as a comma-separated string')

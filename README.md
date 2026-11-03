@@ -69,9 +69,11 @@ bunx tall-man-medis -a -r "Naloxon"
 Sometimes the AI might categorize a medication differently than you expect, or an institution has non-standard class assignments. You can **force a specific categorization** by appending the classification in parentheses/brackets next to the drug name!
 
 ```bash
-bunx tall-man-medis "Ketamine (Analgetikum)" "Adrenalin (Vasopressors)"
+bunx tall-man-medis "Ketamin (Induction drugs)" "Adrenalin (Vasopressors)"
 ```
-*(This entirely overrides the initial categorization step, meaning zero AI hallucination regarding the ISO standard color group!)*
+*(When the bracket text matches a class name from `classes.json` (case-insensitive), this entirely overrides the initial categorization step, meaning zero AI hallucination regarding the ISO standard color group! Any other text, e.g. `(Analgetikum)`, is only passed to the AI as a hint.)*
+
+Available classes: `Anti-emetics`, `Anticholinergic drugs`, `Benzodiazepines`, `Benzodiazepine antagonists`, `Induction drugs`, `Local anaesthetics`, `Muscle relaxants`, `Muscle relaxant reversal drugs`, `Opioids`, `Opioid antagonists`, `Vasopressors`, `Hypotensive drugs`, `Other`, plus the dedicated `adrenaline`, `suxamethonium` and `protamine` labels.
 
 ### 5. Write-In / Blank Labels (Standard layout)
 By default (without the `-a` flag), the tool generates generic labels with a standardized dotted line for manual dosage inputs.
@@ -106,7 +108,7 @@ You can provide medications via a text file, a comma-separated string, or direct
 
 **1. Direct arguments (Positional):**
 ```bash
-bunx tall-man-medis Adrenalin Fentanyl "Propofol (Hypnotics)"
+bunx tall-man-medis Adrenalin Fentanyl "Propofol (Induction drugs)"
 ```
 
 **2. Using a string flag:**
@@ -152,7 +154,7 @@ import { generateMediLabels } from './mkMediLabels';
 await generateMediLabels({
     medications: [
         { name: "Fentanyl" },
-        { name: "Propofol", userClass: "Hypnotics" } // Provide a hard "hint" bypassing random guesses
+        { name: "Propofol", userClass: "Induction drugs" } // Forces this class from classes.json, skipping the AI categorization
     ],
     apiKey: process.env.GEMINI_API_KEY,
     languagePriority: 'german',
