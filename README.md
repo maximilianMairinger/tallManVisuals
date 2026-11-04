@@ -35,7 +35,7 @@ The labels follow ISO 26825:2020 as summarised in the [Association of Anaestheti
 
 **Following the standard**
 - Class colours (Pantone) as listed in the guidance.
-- Antagonists / drugs of opposite action: white label with diagonal stripes in the colour of the drug class they counteract.
+- Antagonists / drugs of opposite action: white label with diagonal stripes in the colour of the drug class they counteract. The stripes on each side take 15% of the label length, with a thin striped band along the top; the name is shrunk or wrapped to fit between them.
 - Adrenaline and suxamethonium: black upper half with white lettering, class colour below.
 - Benzodiazepines: white drug name on orange, to tell them apart from the warm red of the muscle relaxants.
 - Concentration (`mg/ml`) by default. Write-in labels show a line with the unit at the right (`........ mg/ml`); pre-filled values (`-a`) are centred.
@@ -51,7 +51,7 @@ The labels follow ISO 26825:2020 as summarised in the [Association of Anaestheti
 
 **Not implemented yet**
 - Muscle relaxant reversal drugs: the black line beneath the drug name.
-- Antagonists: stripes at least 15% of the label length on each side (ours are a thin frame), and the unit aligned to the right edge of the drug name.
+- Antagonists: the unit aligned to the right edge of the drug name (ours sits at the right edge of the white area).
 
 ## Features
 - **ISO Color Standards**: Automatically applies the correct background, text, and stripe colors based on standard anesthesia/critical care classifications.

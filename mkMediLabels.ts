@@ -268,22 +268,29 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
     const splitLineY = topEmpty + text1H + (9 * paddingScale * sizeScale);
 
     let backgroundSvg = '';
-    let frameInset = 0; // How far stripes or a border reach into the label; text must stay inside it
+    // How far stripes or a border reach into the label from the sides and from the top; text must stay inside
+    let frameInsetX = 0;
+    let frameInsetTop = 0;
 
     if (medClass.isStriped && medClass.secondaryBackgroundColor) {
         const stripeHex = PANTONE_TO_HEX[medClass.secondaryBackgroundColor] || '#000000';
-        const inset = 15 * paddingScale * sizeScale;
-        frameInset = inset;
+        // ISO 26825:2020: the stripes each side of the drug name are at least 15% of the label length.
+        // As in the ISO examples, a thin striped band runs along the top and the bottom stays open.
+        const sideStripeW = 0.15 * newWidth;
+        const topBandH = 15 * paddingScale * sizeScale;
+        frameInsetX = sideStripeW;
+        frameInsetTop = topBandH;
         backgroundSvg = `
             <defs>
                 <pattern id="stripes" width="${20 * sizeScale}" height="${20 * sizeScale}" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
                     <line x1="0" y1="0" x2="0" y2="${20 * sizeScale}" stroke="${stripeHex}" stroke-width="${15 * sizeScale}" />
                 </pattern>
             </defs>
+            <rect width="100%" height="100%" fill="#FFFFFF" rx="${rx}" />
             <rect width="100%" height="100%" fill="url(#stripes)" rx="${rx}" />
-            <rect x="${inset}" y="${inset}" width="${newWidth - 2*inset}" height="${newHeight - 2*inset}" fill="#FFFFFF" rx="${rx * 0.5}" />
-        `;
-    } 
+            <rect x="${sideStripeW}" y="${topBandH}" width="${newWidth - 2 * sideStripeW}" height="${newHeight - topBandH + rx}" fill="#FFFFFF" rx="${rx * 0.5}" />
+        `; // The inner rect runs past the bottom edge so only its top corners are rounded
+    }
     else if (medClass.isSplit && medClass.secondaryBackgroundColor) {
         const bottomHex = PANTONE_TO_HEX[medClass.secondaryBackgroundColor] || '#000000';
         // Precise Bezier curve math for the top corners so they don't deform during scaling
@@ -302,7 +309,7 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
             : shadeColor(bgHex);
         const borderInset = 4 * paddingScale * sizeScale;
         const borderStroke = 8 * paddingScale * sizeScale;
-        frameInset = borderInset + borderStroke / 2;
+        frameInsetX = frameInsetTop = borderInset + borderStroke / 2;
         backgroundSvg = `
             <rect x="${borderInset}" y="${borderInset}" width="${newWidth - 2*borderInset}" height="${newHeight - 2*borderInset}" fill="${bgHex}" stroke="${borderHex}" stroke-width="${borderStroke}" rx="${rx}" />
         `;
@@ -314,14 +321,14 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
     }
 
     // --- Text Fitting (widths measured with the Averta CY metrics) ---
-    const textMaxWidth = newWidth - 2 * (frameInset + 10 * paddingScale * sizeScale);
+    const textMaxWidth = newWidth - 2 * (frameInsetX + 10 * paddingScale * sizeScale);
 
     // Name: shrink to fit on one line; if that gets too small and the name has a space or hyphen, wrap it onto two lines
     const nameFontSize = 32 * sizeScale;
     const oneLineScale = Math.min(1, textMaxWidth / measureText(tallmanSegments(medName), nameFontSize));
 
     // Two lines must stay between the frame and the dosage text (or the split line on split labels)
-    const nameTopLimit = frameInset + 4 * sizeScale;
+    const nameTopLimit = frameInsetTop + 4 * sizeScale;
     const nameBottomLimit = (medClass.isSplit ? splitLineY : bottomY - text2Ascent) - 4 * sizeScale;
     const nameAreaH = nameBottomLimit - nameTopLimit;
     const twoLineHeightEm = NAME_ASCENT + NAME_LINE_GAP + NAME_DESCENT;
