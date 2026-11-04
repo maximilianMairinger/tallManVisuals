@@ -4,6 +4,6 @@
         
         
         <text x="50%" y="39" text-anchor="middle" font-family="Averta CY" font-size="28.8" fill="#000000"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="normal">Xarelto</tspan></text>
-        <text x="50%" y="68.7" text-anchor="middle" font-family="Averta CY" font-size="19.8" fill="#000000"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="bold">20mg</tspan><tspan font-weight="normal">&#160;p.o.</tspan></text>
+        <text x="50%" y="68.7" text-anchor="middle" font-family="Averta CY" font-weight="bold" font-size="19.8" fill="#000000">mg/ml</text>
     
     </svg>
