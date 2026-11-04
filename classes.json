@@ -18,7 +18,7 @@
   "Benzodiazepines": {
     "backgroundColor": "Orange 151",
     "textColor": "White",
-    "unitTextColor": "White",
+    "unitTextColor": "Black",
     "isStriped": false,
     "isSplit": false,
     "hasBorder": false
@@ -63,7 +63,8 @@
     "unitTextColor": "Black",
     "isStriped": true,
     "isSplit": false,
-    "hasBorder": false
+    "hasBorder": false,
+    "hasNameUnderline": true
   },
   "Opioids": {
     "backgroundColor": "Blue 297",

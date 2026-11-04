@@ -37,21 +37,17 @@ The labels follow ISO 26825:2020 as summarised in the [Association of Anaestheti
 - Class colours (Pantone) as listed in the guidance.
 - Antagonists / drugs of opposite action: white label with diagonal stripes in the colour of the drug class they counteract. The stripes on each side take 15% of the label length, with a thin striped band along the top; the name is shrunk or wrapped to fit between them.
 - Adrenaline and suxamethonium: black upper half with white lettering, class colour below.
-- Benzodiazepines: white drug name on orange, to tell them apart from the warm red of the muscle relaxants.
-- Concentration (`mg/ml`) by default. Write-in labels show a line with the unit at the right (`........ mg/ml`); pre-filled values (`-a`) are centred.
+- Benzodiazepines: white drug name on orange, to tell them apart from the warm red of the muscle relaxants. The dose stays black, which is far easier to read on orange (contrast 8.4:1 vs 2.5:1 for white).
+- Muscle relaxant reversal drugs: a black line beneath the drug name, to tell them apart from the other striped labels (especially the orange-striped flumazenil).
+- Concentration (`mg/ml`) by default. Write-in labels show a line with the unit at the right (`........ mg/ml`); on antagonist labels the unit lines up with the right edge of the drug name. Pre-filled values (`-a`) are centred.
 - Tall Man lettering to differentiate look-alike names.
 
 **Deliberate divergences**
-- **Benzodiazepine dose text is white too.** ISO keeps it black; we use one text colour per label.
 - **No separate heparin label.** Drugs without a class fall into `Other`, which uses heparin's ISO design (white, black border, black text). ISO's "other drugs" (black/white) come without an example.
 - **Long names shrink or wrap** onto two lines so they always fit the label.
 - **Administration route** (`-r`, e.g. `i.v.`) can be added after the dose. ISO has no route.
 - **Absolute bolus doses** (`-B`, e.g. `5 mg`) instead of concentrations are available, but off by default.
 - **Darker border** on solid-colour labels (`-b`), off by default.
-
-**Not implemented yet**
-- Muscle relaxant reversal drugs: the black line beneath the drug name.
-- Antagonists: the unit aligned to the right edge of the drug name (ours sits at the right edge of the white area).
 
 ## Features
 - **ISO Color Standards**: Automatically applies the correct background, text, and stripe colors based on standard anesthesia/critical care classifications.

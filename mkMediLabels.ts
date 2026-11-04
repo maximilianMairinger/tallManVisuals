@@ -41,6 +41,7 @@ interface MedClass {
     isSplit: boolean;
     hasBorder: boolean;
     borderColor?: string;
+    hasNameUnderline?: boolean;
 }
 
 export interface InputMed {
@@ -333,12 +334,12 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
     const nameAreaH = nameBottomLimit - nameTopLimit;
     const twoLineHeightEm = NAME_ASCENT + NAME_LINE_GAP + NAME_DESCENT;
 
-    let twoLines: { lines: [string, string]; scale: number } | undefined;
+    let twoLines: { lines: [string, string]; scale: number; widest: number } | undefined;
     if (oneLineScale < WRAP_BELOW_SCALE) {
         for (const lines of twoLineSplits(medName)) {
             const widest = Math.max(...lines.map(line => measureText(tallmanSegments(line), nameFontSize)));
             const scale = Math.min(1, textMaxWidth / widest, nameAreaH / (twoLineHeightEm * nameFontSize));
-            if (!twoLines || scale > twoLines.scale) twoLines = { lines, scale };
+            if (!twoLines || scale > twoLines.scale) twoLines = { lines, scale, widest };
         }
     }
 
@@ -346,17 +347,32 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
         `<text x="50%" y="${y}" text-anchor="middle" font-family="Averta CY" font-size="${fontSize}" fill="${textHex}">${formatTallmanSVG(text)}</text>`;
 
     let nameSvg: string;
+    let nameWidth: number; // rendered width of the (widest line of the) name, which is centered on the label
+    let nameBottom: number; // lowest point of the name's descenders
     if (twoLines && twoLines.scale > oneLineScale) {
         const fontSize = nameFontSize * twoLines.scale;
         const blockTop = nameTopLimit + (nameAreaH - twoLineHeightEm * fontSize) / 2;
         const firstBaseline = blockTop + NAME_ASCENT * fontSize;
+        const secondBaseline = firstBaseline + NAME_LINE_GAP * fontSize;
         nameSvg = nameText(twoLines.lines[0], firstBaseline, fontSize) + '\n        '
-            + nameText(twoLines.lines[1], firstBaseline + NAME_LINE_GAP * fontSize, fontSize);
+            + nameText(twoLines.lines[1], secondBaseline, fontSize);
+        nameWidth = twoLines.widest * twoLines.scale;
+        nameBottom = secondBaseline + NAME_DESCENT * fontSize;
     } else {
         // Shift the baseline up as the font shrinks so the name stays vertically centered where it was
         const fontSize = nameFontSize * oneLineScale;
         const baseline = topTextY - (NAME_ASCENT - NAME_DESCENT) / 2 * (nameFontSize - fontSize);
         nameSvg = nameText(medName, baseline, fontSize);
+        nameWidth = measureText(tallmanSegments(medName), fontSize);
+        nameBottom = baseline + NAME_DESCENT * fontSize;
+    }
+    const nameLeft = (newWidth - nameWidth) / 2;
+    const nameRight = nameLeft + nameWidth;
+
+    // ISO 26825:2020 marks muscle relaxant reversal drugs with a black line beneath the drug name, halfway down to the dosage
+    if (medClass.hasNameUnderline) {
+        const underlineY = (nameBottom + bottomY - text2Ascent) / 2;
+        nameSvg += `\n        <line x1="${nameLeft}" y1="${underlineY}" x2="${nameRight}" y2="${underlineY}" stroke="${textHex}" stroke-width="${1.5 * sizeScale}" />`;
     }
 
     // Dosage: bold amount + normal rest, shrunk the same way if it is too wide (next to the write-in line when there is one)
@@ -381,10 +397,17 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
             bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY" font-weight="bold" font-size="${dosageFontSize}" fill="${unitTextHex}">${dosageText}</text>`;
         }
     } else {
-        // Auto-Dosage OFF -> Write-in line across the label with the unit pinned to the right, as in ISO 26825 ("........ mg/ml")
+        // Auto-Dosage OFF -> Write-in line with the unit pinned to the right, as in ISO 26825 ("........ mg/ml")
         const textLeft = (newWidth - textMaxWidth) / 2;
-        const textX = newWidth - textLeft;
-        const lineX1 = textLeft;
+        const textRight = newWidth - textLeft;
+        let textX = textRight;
+        let lineX1 = textLeft;
+        if (medClass.isStriped) {
+            // Antagonists: the unit lines up with the right edge of the drug name, and the line starts at its left edge,
+            // stretched (within the white area) if that would make the line shorter than minLineLen
+            textX = Math.min(textRight, Math.max(nameRight, textLeft + minLineLen + gap + dosageWidth));
+            lineX1 = Math.max(textLeft, Math.min(nameLeft, textX - dosageWidth - gap - minLineLen));
+        }
         const lineX2 = textX - dosageWidth - gap;
 
         const parts = dosageParts;
