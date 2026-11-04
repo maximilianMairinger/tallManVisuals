@@ -47,7 +47,7 @@ The labels follow ISO 26825:2020 as summarised in the [Association of Anaestheti
 - **Long names shrink or wrap** onto two lines so they always fit the label.
 - **Administration route** (`-r`, e.g. `i.v.`) can be added after the dose. ISO has no route.
 - **Absolute bolus doses** (`-B`, e.g. `5 mg`) instead of concentrations are available, but off by default.
-- **Darker border** on solid-colour labels (`-b`), off by default.
+- **Darker border** (`-b`), off by default: solid-colour labels get a darker shade of their background as a border; on adrenaline and suxamethonium each half gets its own (the black half stays black).
 
 ## Features
 - **ISO Color Standards**: Automatically applies the correct background, text, and stripe colors based on standard anesthesia/critical care classifications.
@@ -153,7 +153,7 @@ bunx tall-man-medis -f input_meds.txt
 | `-r, --route` | Include administration route (e.g. `i.v.`, `inh.`) next to the dosage/concentration | `false` |
 | `-s, --scale <number>` | Scale multiplier for text padding. `1.0` is default size | `1.0` |
 | `-S, --size-scale <number>` | Scale multiplier for the entire SVG size linearly | `1.0` |
-| `-b, --tonal-border` | Give solid-color labels a border in a darker shade of their background (computed in OKLCH). Not part of ISO 26825 | `false` |
+| `-b, --tonal-border` | Give solid-color and split labels a border in a darker shade of their background (computed in OKLCH). Not part of ISO 26825 | `false` |
 | `--model <string>` | Gemini model to use | `gemini-3.8-flash` |
 | `-k, --api-key <string>` | Pass the Gemini API key as plaintext | |
 | `-K, --api-key-file <path>`| Path to file containing the Gemini API key | |
@@ -185,6 +185,6 @@ await generateMediLabels({
     route: true,         // Append the route of administration, e.g. "i.v."
     scale: 1.0,          // Padding scale
     sizeScale: 0.9,      // Scaled down linear SVG size
-    tonalBorder: true    // Darker border on solid-color labels (not part of ISO 26825)
+    tonalBorder: true    // Darker border on solid-color and split labels (not part of ISO 26825)
 });
 ```

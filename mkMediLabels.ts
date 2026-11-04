@@ -272,6 +272,9 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
     // How far stripes or a border reach into the label from the sides and from the top; text must stay inside
     let frameInsetX = 0;
     let frameInsetTop = 0;
+    // Geometry shared by every bordered label (the border's outer edge sits on the label edge)
+    const borderInset = 4 * paddingScale * sizeScale;
+    const borderStroke = 8 * paddingScale * sizeScale;
 
     if (medClass.isStriped && medClass.secondaryBackgroundColor) {
         const stripeHex = PANTONE_TO_HEX[medClass.secondaryBackgroundColor] || '#000000';
@@ -294,22 +297,37 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
     }
     else if (medClass.isSplit && medClass.secondaryBackgroundColor) {
         const bottomHex = PANTONE_TO_HEX[medClass.secondaryBackgroundColor] || '#000000';
+        // With tonalBorder the fill follows the border's outer edge, so no fill peeks out past it at the corners
+        const fillRx = tonalBorder ? rx + borderInset : rx;
         // Precise Bezier curve math for the top corners so they don't deform during scaling
-        const cp = rx * 0.55228; 
-        const splitPath = `M 0 ${rx} C 0 ${rx - cp} ${rx - cp} 0 ${rx} 0 L ${newWidth - rx} 0 C ${newWidth - rx + cp} 0 ${newWidth} ${rx - cp} ${newWidth} ${rx} L ${newWidth} ${splitLineY} L 0 ${splitLineY} Z`;
-        
+        const cp = fillRx * 0.55228;
+        const splitPath = `M 0 ${fillRx} C 0 ${fillRx - cp} ${fillRx - cp} 0 ${fillRx} 0 L ${newWidth - fillRx} 0 C ${newWidth - fillRx + cp} 0 ${newWidth} ${fillRx - cp} ${newWidth} ${fillRx} L ${newWidth} ${splitLineY} L 0 ${splitLineY} Z`;
+
         backgroundSvg = `
-            <rect width="100%" height="100%" fill="${bottomHex}" rx="${rx}" />
+            <rect width="100%" height="100%" fill="${bottomHex}" rx="${fillRx}" />
             <path d="${splitPath}" fill="${bgHex}" />
         `;
+
+        if (tonalBorder) {
+            // Each half gets a border in a darker shade of its own colour (black stays black), split at the same line
+            frameInsetX = frameInsetTop = borderInset + borderStroke / 2;
+            const halfBorder = (borderHex: string, clipId: string) =>
+                `<rect x="${borderInset}" y="${borderInset}" width="${newWidth - 2*borderInset}" height="${newHeight - 2*borderInset}" fill="none" stroke="${borderHex}" stroke-width="${borderStroke}" rx="${rx}" clip-path="url(#${clipId})" />`;
+            backgroundSvg += `
+            <defs>
+                <clipPath id="split-top"><rect width="${newWidth}" height="${splitLineY}" /></clipPath>
+                <clipPath id="split-bottom"><rect y="${splitLineY}" width="${newWidth}" height="${newHeight - splitLineY}" /></clipPath>
+            </defs>
+            ${halfBorder(shadeColor(bgHex), 'split-top')}
+            ${halfBorder(shadeColor(bottomHex), 'split-bottom')}
+        `;
+        }
     }
     else if ((medClass.hasBorder && medClass.borderColor) || tonalBorder) {
         // Classes with their own border keep it; with tonalBorder (not part of ISO 26825), solid labels get a darker shade of their background
         const borderHex = medClass.hasBorder && medClass.borderColor
             ? PANTONE_TO_HEX[medClass.borderColor] || '#000000'
             : shadeColor(bgHex);
-        const borderInset = 4 * paddingScale * sizeScale;
-        const borderStroke = 8 * paddingScale * sizeScale;
         frameInsetX = frameInsetTop = borderInset + borderStroke / 2;
         backgroundSvg = `
             <rect x="${borderInset}" y="${borderInset}" width="${newWidth - 2*borderInset}" height="${newHeight - 2*borderInset}" fill="${bgHex}" stroke="${borderHex}" stroke-width="${borderStroke}" rx="${rx}" />
@@ -728,7 +746,7 @@ Examples:
         .option('-r, --route', 'Include administration route (e.g. i.v., inh.) next to the dosage/concentration', false)
         .option('-s, --scale <number>', 'Scale multiplier for text relative to label size. Larger means smaller padding (default: 1.0)', '1.0')
         .option('-S, --size-scale <number>', 'Scale multiplier for the entire SVG size linearly (default: 1.0)', '1.0')
-        .option('-b, --tonal-border', 'Give solid-color labels a border in a darker shade of their background (not part of ISO 26825)', false)
+        .option('-b, --tonal-border', 'Give solid-color and split labels a border in a darker shade of their background (not part of ISO 26825)', false)
         .option('--model <string>', 'Gemini API model to use', 'gemini-3.8-flash')
         .option('-k, --api-key <string>', 'Gemini API key as plaintext')
         .option('-K, --api-key-file <path>', 'Path to file containing Gemini API key')
