@@ -5,8 +5,8 @@
         
         <text x="50%" y="39" text-anchor="middle" font-family="Averta CY" font-size="28.8" fill="#000000"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="normal">Insulin</tspan></text>
         
-                <line x1="52.35" y1="68.7" x2="106.35" y2="68.7" stroke="#000000" stroke-width="2.25" stroke-dasharray="3.6,7.2" stroke-linecap="round" />
-                <text x="111.14999999999999" y="68.7" text-anchor="start" font-family="Averta CY" font-weight="bold" font-size="19.8" fill="#000000">IE/ml</text>
+                <line x1="10.799999999999997" y1="68.7" x2="154.61039999999997" y2="68.7" stroke="#000000" stroke-width="2.25" stroke-dasharray="3.6,7.2" stroke-linecap="round" />
+                <text x="208.95" y="68.7" text-anchor="end" font-family="Averta CY" font-weight="bold" font-size="19.8" fill="#000000">IE/ml</text>
             
     
     </svg>
