@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import { AVERTA_CY_WIDTHS, AVERTA_CY_FALLBACK_WIDTH } from './fontMetrics.ts';
 
 const PANTONE_TO_HEX: Record<string, string> = {
@@ -357,9 +357,9 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
     const dosageSegments: TextSegment[] = dosageParts.length > 1
         ? [{ text: dosageParts[0], bold: true }, { text: ' ' + dosageParts.slice(1).join(' '), bold: false }]
         : [{ text: dosageText, bold: true }];
-    const lineLen = 90 * paddingScale * sizeScale;
+    const minLineLen = 90 * paddingScale * sizeScale; // the write-in line never gets shorter than this
     const gap = 8 * paddingScale * sizeScale;
-    const dosageMaxWidth = isAutoDosage ? textMaxWidth : textMaxWidth - lineLen - gap;
+    const dosageMaxWidth = isAutoDosage ? textMaxWidth : textMaxWidth - minLineLen - gap;
     const dosageFontSize = 22 * sizeScale * Math.min(1, dosageMaxWidth / measureText(dosageSegments, 22 * sizeScale));
     const dosageWidth = measureText(dosageSegments, dosageFontSize);
 
@@ -374,24 +374,22 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
             bottomTextSvg = `<text x="50%" y="${bottomY}" text-anchor="middle" font-family="Averta CY" font-weight="bold" font-size="${dosageFontSize}" fill="${unitTextHex}">${dosageText}</text>`;
         }
     } else {
-        // Auto-Dosage OFF -> Centered Group (Line + Unit text), bottom-aligned
-        const totalWidth = lineLen + gap + dosageWidth;
-        
-        const startX = (newWidth / 2) - (totalWidth / 2);
-        const lineX1 = startX;
-        const lineX2 = startX + lineLen;
-        const textX = lineX2 + gap;
+        // Auto-Dosage OFF -> Write-in line across the label with the unit pinned to the right, as in ISO 26825 ("........ mg/ml")
+        const textLeft = (newWidth - textMaxWidth) / 2;
+        const textX = newWidth - textLeft;
+        const lineX1 = textLeft;
+        const lineX2 = textX - dosageWidth - gap;
 
         const parts = dosageParts;
         if (parts.length > 1) {
             bottomTextSvg = `
                 <line x1="${lineX1}" y1="${bottomY}" x2="${lineX2}" y2="${bottomY}" stroke="${unitTextHex}" stroke-width="${2.5 * sizeScale}" stroke-dasharray="${4 * sizeScale},${8 * sizeScale}" stroke-linecap="round" />
-                <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY" font-size="${dosageFontSize}" fill="${unitTextHex}"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="bold">${parts[0]}</tspan><tspan font-weight="normal">&#160;${parts.slice(1).join(' ')}</tspan></text>
+                <text x="${textX}" y="${bottomY}" text-anchor="end" font-family="Averta CY" font-size="${dosageFontSize}" fill="${unitTextHex}"><tspan font-weight="normal">&#8203;</tspan><tspan font-weight="bold">${parts[0]}</tspan><tspan font-weight="normal">&#160;${parts.slice(1).join(' ')}</tspan></text>
             `;
         } else {
             bottomTextSvg = `
                 <line x1="${lineX1}" y1="${bottomY}" x2="${lineX2}" y2="${bottomY}" stroke="${unitTextHex}" stroke-width="${2.5 * sizeScale}" stroke-dasharray="${4 * sizeScale},${8 * sizeScale}" stroke-linecap="round" />
-                <text x="${textX}" y="${bottomY}" text-anchor="start" font-family="Averta CY" font-weight="bold" font-size="${dosageFontSize}" fill="${unitTextHex}">${dosageText}</text>
+                <text x="${textX}" y="${bottomY}" text-anchor="end" font-family="Averta CY" font-weight="bold" font-size="${dosageFontSize}" fill="${unitTextHex}">${dosageText}</text>
             `;
         }
     }
@@ -447,7 +445,8 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     const languagePriority = options.languagePriority || 'german';
     const outputDir = options.outputDir || './labels';
     const autoDosage = options.autoDosage || false;
-    const concentration = options.concentration || false;
+    // ISO 26825 labels show a concentration (mg/ml); an absolute bolus dose (mg) is opt-in
+    const concentration = options.concentration ?? true;
     const route = options.route || false;
     const tonalBorder = options.tonalBorder || false;
     const modelName = options.modelName || 'gemini-3.8-flash';
@@ -693,7 +692,9 @@ Examples:
         .option('-m, --medications <string>', 'Direct input of medications as a comma-separated string')
         .option('-o, --output <dir>', 'Directory to save the generated SVG files', './labels')
         .option('-a, --auto-dosage', 'Automatically fetch absolute adult IV bolus dosages (e.g., 5 mg) via API', false)
-        .option('-C, --concentration', 'If auto-dosage is enabled, fetch concentration (e.g., 10 mg/ml). If disabled, infers concentration unit.', false)
+        .option('-B, --bolus', 'Use an absolute bolus dose (e.g. 5 mg) instead of the ISO concentration (e.g. 5 mg/ml)', false)
+        // Concentration is the default now; -C is still accepted so older commands keep working
+        .addOption(new Option('-C, --concentration').hideHelp())
         .option('-r, --route', 'Include administration route (e.g. i.v., inh.) next to the dosage/concentration', false)
         .option('-s, --scale <number>', 'Scale multiplier for text relative to label size. Larger means smaller padding (default: 1.0)', '1.0')
         .option('-S, --size-scale <number>', 'Scale multiplier for the entire SVG size linearly (default: 1.0)', '1.0')
@@ -753,7 +754,7 @@ Examples:
             languagePriority: options.languagePriority,
             outputDir: options.output,
             autoDosage: options.autoDosage,
-            concentration: options.concentration,
+            concentration: !options.bolus,
             route: options.route,
             scale: options.scale,
             sizeScale: options.sizeScale,

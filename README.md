@@ -26,9 +26,32 @@ bunx tall-man-medis -a "Adrenalin"
 > I think deno would work as well, but havent tested it yet.
 
 ## Further Reading & Standards
-- The official ISO for the colors: [ISO 26825:2020 - User-applied labels for syringes containing drugs used during anaesthesia](https://www.iso.org/standard/74033.html). I took the colors from [anaesthetists.org](https://anaesthetists.org/Portals/0/PDFs/Guidelines%20PDFs/Syringe%20labelling%202022%20v1.1.pdf?ver=2022-10-26-140938-370) (with a singular adjustment for benzodiazepines to make the dosage text color also white, as the spec doesnt make sense there IMO)
+- The official ISO for the colors: [ISO 26825:2020 - User-applied labels for syringes containing drugs used during anaesthesia](https://www.iso.org/standard/74033.html). I took the colors from [anaesthetists.org](https://anaesthetists.org/Portals/0/PDFs/Guidelines%20PDFs/Syringe%20labelling%202022%20v1.1.pdf?ver=2022-10-26-140938-370). Where this tool deliberately differs, see [ISO 26825 and where we diverge](#iso-26825-and-where-we-diverge).
 - [ISMP Tall Man Lettering Guide](https://online.ecri.org/hubfs/ISMP/Resources/ISMP_Look-Alike_Tallman_Letters.pdf)
 - [Proposal of a Tall Man Letter list for German-speaking countries](https://pmc.ncbi.nlm.nih.gov/articles/PMC8275545/)
+
+## ISO 26825 and where we diverge
+The labels follow ISO 26825:2020 as summarised in the [Association of Anaesthetists' 2022 guidance](https://anaesthetists.org/Portals/0/PDFs/Guidelines%20PDFs/Syringe%20labelling%202022%20v1.1.pdf?ver=2022-10-26-140938-370). Where we differ, it is on purpose and listed here.
+
+**Following the standard**
+- Class colours (Pantone) as listed in the guidance.
+- Antagonists / drugs of opposite action: white label with diagonal stripes in the colour of the drug class they counteract.
+- Adrenaline and suxamethonium: black upper half with white lettering, class colour below.
+- Benzodiazepines: white drug name on orange, to tell them apart from the warm red of the muscle relaxants.
+- Concentration (`mg/ml`) by default. Write-in labels show a line with the unit at the right (`........ mg/ml`); pre-filled values (`-a`) are centred.
+- Tall Man lettering to differentiate look-alike names.
+
+**Deliberate divergences**
+- **Benzodiazepine dose text is white too.** ISO keeps it black; we use one text colour per label.
+- **No separate heparin label.** Drugs without a class fall into `Other`, which uses heparin's ISO design (white, black border, black text). ISO's "other drugs" (black/white) come without an example.
+- **Long names shrink or wrap** onto two lines so they always fit the label.
+- **Administration route** (`-r`, e.g. `i.v.`) can be added after the dose. ISO has no route.
+- **Absolute bolus doses** (`-B`, e.g. `5 mg`) instead of concentrations are available, but off by default.
+- **Darker border** on solid-colour labels (`-b`), off by default.
+
+**Not implemented yet**
+- Muscle relaxant reversal drugs: the black line beneath the drug name.
+- Antagonists: stripes at least 15% of the label length on each side (ours are a thin frame), and the unit aligned to the right edge of the drug name.
 
 ## Features
 - **ISO Color Standards**: Automatically applies the correct background, text, and stripe colors based on standard anesthesia/critical care classifications.
@@ -45,14 +68,14 @@ You can review a large output of generated examples in the `example/withDoage` f
 ### 1. Complex Tall Man Translation (DiazePAM)
 Correctly breaks out multiple uppercase spans and predicts a standard bolus dose + application route.
 ```bash
-bunx tall-man-medis -a -r "diazepam"
+bunx tall-man-medis -a -r -B "diazepam"
 ```
 <img src="example/withDoage/DiazePAM.svg" width="220" />
 
 ### 2. Inhalation Route Prediction (Methoxyfluran)
 Notice how the API correctly deduces that Methoxyfluran is an inhaled volatile agent, returning `3ml inh.` rather than a systemic mg dose!
 ```bash
-bunx tall-man-medis -a -r "Methoxyfluran"
+bunx tall-man-medis -a -r -B "Methoxyfluran"
 ```
 <img src="example/withDoage/Methoxyfluran.svg" width="220" />
 
@@ -61,7 +84,7 @@ bunx tall-man-medis -a -r "Methoxyfluran"
 - Automatic recognition: the generator detects common antidotes/antagonists (e.g., Naloxon, Flumazenil, Sugammadex) and tags them as "Antidote / Antagonist" to improve classification and labeling semantics.
 
 ```bash
-bunx tall-man-medis -a -r "Naloxon"
+bunx tall-man-medis -a -r -B "Naloxon"
 ```
 <img src="example/withDoage/Naloxon.svg" width="220" />
 
@@ -130,7 +153,7 @@ bunx tall-man-medis -f input_meds.txt
 | `-l, --language-priority <german\|english>` | Base language to prioritize for Tall Man Lettering | `german` |
 | `-o, --output <dir>` | Directory to save generated SVGs | `./labels` |
 | `-a, --auto-dosage` | Fetch numerical dosages (e.g., `5 mg`) via API | `false` |
-| `-C, --concentration` | Fetch concentration (e.g., `10 mg/ml`). (If `false`, uses absolute dose instead) | `false` |
+| `-B, --bolus` | Use an absolute bolus dose (e.g. `5 mg`) instead of the ISO concentration (e.g. `5 mg/ml`) | `false` |
 | `-r, --route` | Include administration route (e.g. `i.v.`, `inh.`) next to the dosage/concentration | `false` |
 | `-s, --scale <number>` | Scale multiplier for text padding. `1.0` is default size | `1.0` |
 | `-S, --size-scale <number>` | Scale multiplier for the entire SVG size linearly | `1.0` |
@@ -141,7 +164,7 @@ bunx tall-man-medis -f input_meds.txt
 
 Example with full layout options:
 ```bash
-bunx tall-man-medis -a -r -C -S 0.9 -s 1.2 "Thiopental"
+bunx tall-man-medis -a -r -S 0.9 -s 1.2 "Thiopental"
 ```
 
 ---
@@ -162,7 +185,7 @@ await generateMediLabels({
     languagePriority: 'german',
     outputDir: "./custom_labels",
     autoDosage: true,    // Generate text sizes like "5 mg"
-    concentration: true, // Use concentration format "10 mg/ml" 
+    concentration: true, // ISO concentration "10 mg/ml" (default); false for an absolute bolus dose "5 mg"
     route: true,         // Append the route of administration, e.g. "i.v."
     scale: 1.0,          // Padding scale
     sizeScale: 0.9,      // Scaled down linear SVG size
