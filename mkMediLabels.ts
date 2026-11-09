@@ -237,7 +237,8 @@ const NAME_ASCENT = 0.75;
 const NAME_DESCENT = 0.25;
 const NAME_LINE_GAP = 1.05; // baseline to baseline for two-line names
 
-function generateSVG(medName: string, medClass: MedClass, dosageText: string, isAutoDosage: boolean, paddingScale: number, sizeScale: number, tonalBorder: boolean): string {
+// dosageText null renders a name-only label: no dosage, unit or write-in line, with the name centered in the label
+function generateSVG(medName: string, medClass: MedClass, dosageText: string | null, isAutoDosage: boolean, paddingScale: number, sizeScale: number, tonalBorder: boolean): string {
     const bgHex = PANTONE_TO_HEX[medClass.backgroundColor] || '#FFFFFF';
     const textHex = PANTONE_TO_HEX[medClass.textColor] || '#000000';
     const unitTextHex = PANTONE_TO_HEX[medClass.unitTextColor] || '#000000';
@@ -272,6 +273,7 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
     // How far stripes or a border reach into the label from the sides and from the top; text must stay inside
     let frameInsetX = 0;
     let frameInsetTop = 0;
+    let frameInsetBottom = 0; // striped labels are open at the bottom
     // Geometry shared by every bordered label (the border's outer edge sits on the label edge)
     const borderInset = 4 * paddingScale * sizeScale;
     const borderStroke = 8 * paddingScale * sizeScale;
@@ -310,7 +312,7 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
 
         if (tonalBorder) {
             // Each half gets a border in a darker shade of its own colour (black stays black), split at the same line
-            frameInsetX = frameInsetTop = borderInset + borderStroke / 2;
+            frameInsetX = frameInsetTop = frameInsetBottom = borderInset + borderStroke / 2;
             const halfBorder = (borderHex: string, clipId: string) =>
                 `<rect x="${borderInset}" y="${borderInset}" width="${newWidth - 2*borderInset}" height="${newHeight - 2*borderInset}" fill="none" stroke="${borderHex}" stroke-width="${borderStroke}" rx="${rx}" clip-path="url(#${clipId})" />`;
             backgroundSvg += `
@@ -328,7 +330,7 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
         const borderHex = medClass.hasBorder && medClass.borderColor
             ? PANTONE_TO_HEX[medClass.borderColor] || '#000000'
             : shadeColor(bgHex);
-        frameInsetX = frameInsetTop = borderInset + borderStroke / 2;
+        frameInsetX = frameInsetTop = frameInsetBottom = borderInset + borderStroke / 2;
         backgroundSvg = `
             <rect x="${borderInset}" y="${borderInset}" width="${newWidth - 2*borderInset}" height="${newHeight - 2*borderInset}" fill="${bgHex}" stroke="${borderHex}" stroke-width="${borderStroke}" rx="${rx}" />
         `;
@@ -347,8 +349,9 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
     const oneLineScale = Math.min(1, textMaxWidth / measureText(tallmanSegments(medName), nameFontSize));
 
     // Two lines must stay between the frame and the dosage text (or the split line on split labels)
+    // Without a dosage the name gets the whole label (still only the top half on split labels)
     const nameTopLimit = frameInsetTop + 4 * sizeScale;
-    const nameBottomLimit = (medClass.isSplit ? splitLineY : bottomY - text2Ascent) - 4 * sizeScale;
+    const nameBottomLimit = (medClass.isSplit ? splitLineY : dosageText === null ? newHeight - frameInsetBottom : bottomY - text2Ascent) - 4 * sizeScale;
     const nameAreaH = nameBottomLimit - nameTopLimit;
     const twoLineHeightEm = NAME_ASCENT + NAME_LINE_GAP + NAME_DESCENT;
 
@@ -377,9 +380,12 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
         nameWidth = twoLines.widest * twoLines.scale;
         nameBottom = secondBaseline + NAME_DESCENT * fontSize;
     } else {
-        // Shift the baseline up as the font shrinks so the name stays vertically centered where it was
+        // Shift the baseline up as the font shrinks so the name stays vertically centered where it was;
+        // without a dosage, center it in the name area instead
         const fontSize = nameFontSize * oneLineScale;
-        const baseline = topTextY - (NAME_ASCENT - NAME_DESCENT) / 2 * (nameFontSize - fontSize);
+        const baseline = dosageText === null
+            ? nameTopLimit + nameAreaH / 2 + (NAME_ASCENT - NAME_DESCENT) / 2 * fontSize
+            : topTextY - (NAME_ASCENT - NAME_DESCENT) / 2 * (nameFontSize - fontSize);
         nameSvg = nameText(medName, baseline, fontSize);
         nameWidth = measureText(tallmanSegments(medName), fontSize);
         nameBottom = baseline + NAME_DESCENT * fontSize;
@@ -389,8 +395,15 @@ function generateSVG(medName: string, medClass: MedClass, dosageText: string, is
 
     // ISO 26825:2020 marks muscle relaxant reversal drugs with a black line beneath the drug name, halfway down to the dosage
     if (medClass.hasNameUnderline) {
-        const underlineY = (nameBottom + bottomY - text2Ascent) / 2;
+        const underlineY = dosageText === null ? nameBottom + 4 * sizeScale : (nameBottom + bottomY - text2Ascent) / 2;
         nameSvg += `\n        <line x1="${nameLeft}" y1="${underlineY}" x2="${nameRight}" y2="${underlineY}" stroke="${textHex}" stroke-width="${1.5 * sizeScale}" />`;
+    }
+
+    if (dosageText === null) {
+        return `<svg xmlns="http://www.w3.org/2000/svg" width="${newWidth}" height="${newHeight}" viewBox="0 0 ${newWidth} ${newHeight}">
+        ${backgroundSvg}
+        ${nameSvg}
+    </svg>`;
     }
 
     // Dosage: bold amount + normal rest, shrunk the same way if it is too wide (next to the write-in line when there is one)
@@ -468,6 +481,7 @@ export interface GenerateMediLabelsOptions {
     sizeScale?: number | string;
     modelName?: string;
     tonalBorder?: boolean;
+    nameOnly?: boolean;
 }
 
 export async function generateMediLabels(options: GenerateMediLabelsOptions) {
@@ -497,6 +511,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     const concentration = options.concentration ?? true;
     const route = options.route || false;
     const tonalBorder = options.tonalBorder || false;
+    const nameOnly = options.nameOnly || false;
     const modelName = options.modelName || 'gemini-3.8-flash';
 
 
@@ -537,6 +552,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
     }
 
     console.log(`Loaded ${tallmanMap.size} unique Tall Man lettering entries.`);
+    console.log(`Name only: ${nameOnly ? "ON (no dosage, unit or write-in line)" : "OFF"}`);
     console.log(`Auto-dosage resolution: ${autoDosage ? "ON" : "OFF"}`);
     console.log(`Resolution Mode: ${concentration ? "Concentration (e.g., mg/ml)" : "Absolute Bolus Dose (e.g., mg)"}`);
     console.log(`Text Scale: ${scaleInputValue} (Padding Multiplier: ${paddingScale.toFixed(2)})`);
@@ -562,7 +578,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
 
         let assignedClass = "";
         let classPromise: Promise<string>;
-        let dosagePromise: Promise<string>;
+        let dosagePromise: Promise<string | null>;
 
         // 1. Setup Class Promise
         // A user class that names a class in classes.json is forced as-is; anything else is only a hint for the LLM.
@@ -613,77 +629,81 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
             });
         }
 
-        // 2. Setup Dosage Promise
-        let dosagePrompt = '';
-        if (autoDosage) {
-            if (concentration) {
-                dosagePrompt = `
-                You are an expert emergency physician/paramedic operating in Austria/Europe.
-                What is the standard pre-filled syringe or standard ampule/drawing concentration for the emergency medication "${tallmanName}"?
-                Instructions:
-                1. Respond ONLY with the numerical value, unit${route ? ', and administration route' : ''} (e.g., "1 mg/ml"${route ? ' i.v.' : ''}, "50 mcg/ml", "1000 IE/ml", "0.5 mg/ml").
-                2. Do not include any text, markdown, or explanation.
-                3. If there are multiple, provide the single most common adult emergency concentration. DO NOT provide ranges or weight-based doses.
-                `;
-            } else {
-                dosagePrompt = `
-                You are an expert emergency physician/paramedic operating in Austria/Europe.
-                What is the standard absolute single-dose for one-time IV bolus or single-dose inhalation/application administration for the emergency medication "${tallmanName}"?
-                Instructions:
-                1. Respond ONLY with the numerical value, unit${route ? ', and administration route' : ''} (e.g., "5 mg"${route ? ' i.v.' : ''}, "1 g", "50 mcg", "10 IE", "3 ml"${route ? ' inh.' : ''}).
-                2. Do not include any text, markdown, or explanation.
-                3. If there are multiple, provide the single most common adult emergency bolus/single dose. DO NOT provide ranges or weight-based doses.
-                `;
-            }
+        // 2. Setup Dosage Promise (name-only labels need no dosage, so they skip the request)
+        if (nameOnly) {
+            dosagePromise = Promise.resolve(null);
         } else {
-            // Auto dosage OFF -> Infer ONLY the Unit (no numbers)
-            if (concentration) {
-                dosagePrompt = `
-                You are an expert emergency physician/paramedic operating in Austria/Europe.
-                What is the standard unit of concentration for the emergency medication "${tallmanName}"?
-                Instructions:
-                1. Respond ONLY with the unit itself${route ? ' and administration route' : ''} (e.g., "mg/ml"${route ? ' i.v.' : ''}, "mcg/ml", "IE/ml").
-                2. DO NOT include any numbers.
-                3. Do not include any text, markdown, or explanation.
-                `;
+            let dosagePrompt = '';
+            if (autoDosage) {
+                if (concentration) {
+                    dosagePrompt = `
+                    You are an expert emergency physician/paramedic operating in Austria/Europe.
+                    What is the standard pre-filled syringe or standard ampule/drawing concentration for the emergency medication "${tallmanName}"?
+                    Instructions:
+                    1. Respond ONLY with the numerical value, unit${route ? ', and administration route' : ''} (e.g., "1 mg/ml"${route ? ' i.v.' : ''}, "50 mcg/ml", "1000 IE/ml", "0.5 mg/ml").
+                    2. Do not include any text, markdown, or explanation.
+                    3. If there are multiple, provide the single most common adult emergency concentration. DO NOT provide ranges or weight-based doses.
+                    `;
+                } else {
+                    dosagePrompt = `
+                    You are an expert emergency physician/paramedic operating in Austria/Europe.
+                    What is the standard absolute single-dose for one-time IV bolus or single-dose inhalation/application administration for the emergency medication "${tallmanName}"?
+                    Instructions:
+                    1. Respond ONLY with the numerical value, unit${route ? ', and administration route' : ''} (e.g., "5 mg"${route ? ' i.v.' : ''}, "1 g", "50 mcg", "10 IE", "3 ml"${route ? ' inh.' : ''}).
+                    2. Do not include any text, markdown, or explanation.
+                    3. If there are multiple, provide the single most common adult emergency bolus/single dose. DO NOT provide ranges or weight-based doses.
+                    `;
+                }
             } else {
-                dosagePrompt = `
-                You are an expert emergency physician/paramedic operating in Austria/Europe.
-                What is the standard unit for an absolute single-dose IV bolus of the emergency medication "${tallmanName}"?
-                Instructions:
-                1. Respond ONLY with the unit itself${route ? ' and administration route' : ''} (e.g., "mg"${route ? ' i.v.' : ''}, "mcg", "g", "IE").
-                2. DO NOT include any numbers.
-                3. Do not include any text, markdown, or explanation.
-                `;
+                // Auto dosage OFF -> Infer ONLY the Unit (no numbers)
+                if (concentration) {
+                    dosagePrompt = `
+                    You are an expert emergency physician/paramedic operating in Austria/Europe.
+                    What is the standard unit of concentration for the emergency medication "${tallmanName}"?
+                    Instructions:
+                    1. Respond ONLY with the unit itself${route ? ' and administration route' : ''} (e.g., "mg/ml"${route ? ' i.v.' : ''}, "mcg/ml", "IE/ml").
+                    2. DO NOT include any numbers.
+                    3. Do not include any text, markdown, or explanation.
+                    `;
+                } else {
+                    dosagePrompt = `
+                    You are an expert emergency physician/paramedic operating in Austria/Europe.
+                    What is the standard unit for an absolute single-dose IV bolus of the emergency medication "${tallmanName}"?
+                    Instructions:
+                    1. Respond ONLY with the unit itself${route ? ' and administration route' : ''} (e.g., "mg"${route ? ' i.v.' : ''}, "mcg", "g", "IE").
+                    2. DO NOT include any numbers.
+                    3. Do not include any text, markdown, or explanation.
+                    `;
+                }
             }
-        }
         
-        const startDosageTiming = performance.now();
-        dosagePromise = ai.models.generateContent(prompt(dosagePrompt)).then(res => {
-            console.log(` > [Timing] Dosage API: ${(performance.now() - startDosageTiming).toFixed(0)}ms`);
-            let text = (res.text || '').trim();
+            const startDosageTiming = performance.now();
+            dosagePromise = ai.models.generateContent(prompt(dosagePrompt)).then(res => {
+                console.log(` > [Timing] Dosage API: ${(performance.now() - startDosageTiming).toFixed(0)}ms`);
+                let text = (res.text || '').trim();
             
-            if (text.length > 25 || text.includes('\n')) {
-                return concentration ? "mg/ml" : "mg";
-            }
+                if (text.length > 25 || text.includes('\n')) {
+                    return concentration ? "mg/ml" : "mg";
+                }
             
-            // Remove space between number and unit for aesthetic grouping (1 mg -> 1mg)
-            text = text.replace(/([\d.])\s+([a-zA-Zμµ])/g, '$1$2').trim();
+                // Remove space between number and unit for aesthetic grouping (1 mg -> 1mg)
+                text = text.replace(/([\d.])\s+([a-zA-Zμµ])/g, '$1$2').trim();
 
-            if (!autoDosage) {
-                // Strip whole numbers (5, 0.5, 1.000) but keep the dots in routes like "i.v."
-                text = text.replace(/\d*[.,]?\d+/g, '').trim();
-                if (!text) return concentration ? "mg/ml" : "mg";
-            }
+                if (!autoDosage) {
+                    // Strip whole numbers (5, 0.5, 1.000) but keep the dots in routes like "i.v."
+                    text = text.replace(/\d*[.,]?\d+/g, '').trim();
+                    if (!text) return concentration ? "mg/ml" : "mg";
+                }
             
-            return text;
-        }).catch(err => {
-            console.error(`❌ API Error fetching dosage for ${tallmanName}:`, err);
-            throw err;
-        });
+                return text;
+            }).catch(err => {
+                console.error(`❌ API Error fetching dosage for ${tallmanName}:`, err);
+                throw err;
+            });
+        }
 
         // Execute API calls concurrently. If either fails, write no label rather than one with a guessed class or unit.
-        let resolvedClass: string, resolvedDosage: string;
+        let resolvedClass: string, resolvedDosage: string | null;
         try {
             [resolvedClass, resolvedDosage] = await Promise.all([classPromise, dosagePromise]);
         } catch {
@@ -694,7 +714,7 @@ export async function generateMediLabels(options: GenerateMediLabelsOptions) {
 
         assignedClass = resolvedClass;
         console.log(` > Assigned Class: ${assignedClass}`);
-        console.log(` > Discovered Text: ${resolvedDosage}`);
+        console.log(` > Discovered Text: ${resolvedDosage ?? "(name only)"}`);
 
         const classStyle = classesData[assignedClass] || classesData["Other"];
         const svgContent = generateSVG(tallmanName, classStyle, resolvedDosage, autoDosage, paddingScale, sizeScale, tonalBorder);
@@ -747,6 +767,7 @@ Examples:
         .option('-s, --scale <number>', 'Scale multiplier for text relative to label size. Larger means smaller padding (default: 1.0)', '1.0')
         .option('-S, --size-scale <number>', 'Scale multiplier for the entire SVG size linearly (default: 1.0)', '1.0')
         .option('-b, --tonal-border', 'Give solid-color and split labels a border in a darker shade of their background (not part of ISO 26825)', false)
+        .option('-n, --name-only', 'Only print the medication name: no dosage, unit or write-in line (overrides -a, -B and -r)', false)
         .option('--model <string>', 'Gemini API model to use', 'gemini-3.8-flash')
         .option('-k, --api-key <string>', 'Gemini API key as plaintext')
         .option('-K, --api-key-file <path>', 'Path to file containing Gemini API key')
@@ -807,7 +828,8 @@ Examples:
             scale: options.scale,
             sizeScale: options.sizeScale,
             modelName: options.model,
-            tonalBorder: options.tonalBorder
+            tonalBorder: options.tonalBorder,
+            nameOnly: options.nameOnly
         });
     } catch (e: any) {
         console.error(e.message);

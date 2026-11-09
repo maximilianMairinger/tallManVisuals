@@ -103,6 +103,13 @@ bunx tall-man-medis "Adrenalin"
 
 <img src="example/withoutDosage/Adrenalin.svg" width="220" />
 
+### 6. Name-Only Labels
+With `-n`, the label only shows the medication name, centred, with no dosage, unit or write-in line. Only the class is fetched from the API.
+
+```bash
+bunx tall-man-medis -n "Midazolam"
+```
+
 ## Prerequisites
 - [Bun](https://bun.sh/) (JavaScript runtime)
 - A [Gemini API Key](https://aistudio.google.com/app/apikey).
@@ -154,6 +161,7 @@ bunx tall-man-medis -f input_meds.txt
 | `-s, --scale <number>` | Scale multiplier for text padding. `1.0` is default size | `1.0` |
 | `-S, --size-scale <number>` | Scale multiplier for the entire SVG size linearly | `1.0` |
 | `-b, --tonal-border` | Give solid-color and split labels a border in a darker shade of their background (computed in OKLCH). Not part of ISO 26825 | `false` |
+| `-n, --name-only` | Only print the medication name: no dosage, unit or write-in line. Skips the dosage request, and overrides `-a`, `-B` and `-r` | `false` |
 | `--model <string>` | Gemini model to use | `gemini-3.8-flash` |
 | `-k, --api-key <string>` | Pass the Gemini API key as plaintext | |
 | `-K, --api-key-file <path>`| Path to file containing the Gemini API key | |
@@ -185,6 +193,7 @@ await generateMediLabels({
     route: true,         // Append the route of administration, e.g. "i.v."
     scale: 1.0,          // Padding scale
     sizeScale: 0.9,      // Scaled down linear SVG size
-    tonalBorder: true    // Darker border on solid-color and split labels (not part of ISO 26825)
+    tonalBorder: true,   // Darker border on solid-color and split labels (not part of ISO 26825)
+    nameOnly: false      // true: only the medication name, no dosage, unit or write-in line
 });
 ```
